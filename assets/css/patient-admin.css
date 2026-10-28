@@ -1,0 +1,336 @@
+/* ===============================
+   VIMHANS Patient Learning Module
+==================================*/
+
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+
+:root{
+
+    --primary:#4F46E5;
+    --primary-light:#EEF2FF;
+
+    --success:#16A34A;
+
+    --bg:#F4F7FC;
+
+    --card:#FFFFFF;
+
+    --border:#E5E7EB;
+
+    --text:#1F2937;
+
+    --muted:#6B7280;
+
+    --radius:14px;
+
+    --shadow:0 8px 24px rgba(0,0,0,.06);
+
+}
+
+*{
+    box-sizing:border-box;
+}
+
+body{
+
+    font-family:'Poppins',sans-serif;
+
+    background:var(--bg);
+
+    color:var(--text);
+
+    margin:0;
+
+    padding:0;
+
+}
+
+/* Container */
+
+.patient-container{
+
+    max-width:1400px;
+
+    margin:auto;
+
+    padding:35px;
+
+}
+
+/* Header */
+
+.page-header{
+
+    background:#fff;
+
+    border-radius:var(--radius);
+
+    padding:22px 30px;
+
+    box-shadow:var(--shadow);
+
+    margin-bottom:30px;
+
+}
+
+.page-title{
+
+    font-size:28px;
+
+    font-weight:700;
+
+    margin:0;
+
+}
+
+.page-subtitle{
+
+    color:var(--muted);
+
+    margin-top:6px;
+
+    font-size:14px;
+
+}
+
+/* Main Card */
+
+.content-card{
+
+    background:#fff;
+
+    border-radius:var(--radius);
+
+    box-shadow:var(--shadow);
+
+    padding:30px;
+
+}
+
+/* Labels */
+
+.form-label{
+
+    font-weight:600;
+
+    margin-bottom:8px;
+
+}
+
+/* Input */
+
+.form-control,
+
+.form-select{
+
+    height:50px;
+
+    border-radius:10px;
+
+    border:1px solid var(--border);
+
+    font-size:15px;
+
+}
+
+.form-control:focus,
+
+.form-select:focus{
+
+    border-color:var(--primary);
+
+    box-shadow:0 0 0 .15rem rgba(79,70,229,.15);
+
+}
+
+/* Buttons */
+
+.btn-primary{
+
+    background:var(--primary);
+
+    border:none;
+
+    border-radius:10px;
+
+    padding:11px 28px;
+
+    font-weight:600;
+
+}
+
+.btn-primary:hover{
+
+    background:#4338CA;
+
+}
+
+.btn-outline-primary{
+
+    border-radius:10px;
+
+}
+
+/* Section Title */
+
+.section-title{
+
+    font-size:22px;
+
+    font-weight:600;
+
+    margin-top:35px;
+
+    margin-bottom:20px;
+
+}
+
+/* Section Card */
+
+.section-card{
+
+    background:#fff;
+
+    border:1px solid var(--border);
+
+    border-radius:12px;
+
+    box-shadow:0 3px 10px rgba(0,0,0,.04);
+
+    margin-bottom:18px;
+
+    transition:.25s;
+
+}
+
+.section-card:hover{
+
+    transform:translateY(-2px);
+
+    box-shadow:0 10px 25px rgba(0,0,0,.08);
+
+}
+
+/* Section Header */
+
+.section-header{
+
+    padding:18px 20px;
+
+    cursor:pointer;
+
+}
+
+/* Lessons Area */
+
+.lesson-wrapper{
+
+    padding:0 20px 20px;
+
+}
+
+/* Lesson Card */
+
+.lesson-card{
+
+    border:1px solid #ECECEC;
+
+    border-radius:10px;
+
+    padding:12px 15px;
+
+    margin-bottom:10px;
+
+    transition:.25s;
+
+    background:#fff;
+
+}
+
+.lesson-card:hover{
+
+    background:#F8FAFF;
+
+    border-color:var(--primary);
+
+}
+
+/* Badge */
+
+.lesson-badge{
+
+    background:var(--primary-light);
+
+    color:var(--primary);
+
+    font-size:11px;
+
+    padding:4px 10px;
+
+    border-radius:30px;
+
+    font-weight:600;
+
+}
+
+/* Sticky Footer */
+
+.sticky-footer{
+
+    position:fixed;
+
+    left:0;
+
+    right:0;
+
+    bottom:0;
+
+    background:#fff;
+
+    padding:15px 30px;
+
+    box-shadow:0 -4px 20px rgba(0,0,0,.08);
+
+    z-index:999;
+
+}
+
+/* Counter */
+
+.counter-box{
+
+    font-weight:600;
+
+    color:var(--primary);
+
+}
+
+/* Responsive */
+
+@media(max-width:768px){
+
+.patient-container{
+
+padding:15px;
+
+}
+
+.page-title{
+
+font-size:22px;
+
+}
+
+.content-card{
+
+padding:20px;
+
+}
+
+.sticky-footer{
+
+padding:12px;
+
+}
+
+}
