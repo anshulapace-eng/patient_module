@@ -15,7 +15,7 @@ if (isset($conn)) {
     if (!empty($search)) {
         $searchTerm = "%" . $search . "%";
 
-        $stmt = $conn->prepare("SELECT id, first_name, last_name, phone FROM users WHERE role_id = 2 AND (phone LIKE ? OR first_name LIKE ? OR last_name LIKE ?) LIMIT 20");
+        $stmt = $conn->prepare("SELECT id, first_name, last_name, phone FROM users WHERE role_id = 2 AND patient_id = " . PATIENT_SCOPE_ID . " AND (phone LIKE ? OR first_name LIKE ? OR last_name LIKE ?) LIMIT 20");
         
         if ($stmt) {
             $stmt->bind_param("sss", $searchTerm, $searchTerm, $searchTerm);

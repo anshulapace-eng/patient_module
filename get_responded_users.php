@@ -11,7 +11,9 @@ if (isset($conn)) {
     $query = "SELECT DISTINCT u.id, u.first_name, u.last_name, u.phone, u.email 
               FROM users u 
               JOIN assessment_responses ar ON u.id = ar.patient_id 
-              WHERE (u.phone LIKE ? OR u.first_name LIKE ? OR u.last_name LIKE ? OR u.email LIKE ?) 
+              WHERE u.role_id = 2
+              AND u.patient_id = " . PATIENT_SCOPE_ID . "
+              AND (u.phone LIKE ? OR u.first_name LIKE ? OR u.last_name LIKE ? OR u.email LIKE ?)
               LIMIT 20";
 
     if ($stmt = $conn->prepare($query)) {

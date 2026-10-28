@@ -25,10 +25,13 @@ $results = [];
 // ================= FETCH SAVED REPORT FROM DATABASE =================
 if (isset($conn)) {
     // Hum is patient ka sabse latest record nikal rahe hain
-    $sql = "SELECT user_name, assessment_date, total_score, status_text, responses_data 
-            FROM assessment_responses 
-            WHERE patient_id = ? 
-            ORDER BY id DESC LIMIT 1";
+    $sql = "SELECT ar.user_name, ar.assessment_date, ar.total_score, ar.status_text, ar.responses_data
+            FROM assessment_responses ar
+            INNER JOIN users u ON u.id = ar.patient_id
+                AND u.role_id = 2
+                AND u.patient_id = " . PATIENT_SCOPE_ID . "
+            WHERE ar.patient_id = ?
+            ORDER BY ar.id DESC LIMIT 1";
             
     if ($stmt = $conn->prepare($sql)) {
         $stmt->bind_param("i", $patient_id);

@@ -14,8 +14,10 @@ if (isset($conn)) {
             $query = "SELECT DISTINCT u.id, u.first_name, u.last_name, u.phone, u.email 
                       FROM users u 
                       JOIN assigned_assessments aa ON u.id = aa.patient_id 
-                      WHERE aa.assessment_id = ? 
-                      AND u.phone = ? 
+                      WHERE u.role_id = 2
+                      AND u.patient_id = " . PATIENT_SCOPE_ID . "
+                      AND aa.assessment_id = ?
+                      AND u.phone = ?
                       LIMIT 10";
 
             if ($stmt = $conn->prepare($query)) {
@@ -40,7 +42,9 @@ if (isset($conn)) {
             $query = "SELECT DISTINCT u.id, u.first_name, u.last_name, u.phone, u.email 
                       FROM users u 
                       JOIN assigned_assessments aa ON u.id = aa.patient_id 
-                      WHERE u.phone = ? 
+                      WHERE u.role_id = 2
+                      AND u.patient_id = " . PATIENT_SCOPE_ID . "
+                      AND u.phone = ?
                       LIMIT 10";
 
             if ($stmt = $conn->prepare($query)) {

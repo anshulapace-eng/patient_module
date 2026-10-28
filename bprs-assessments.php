@@ -155,7 +155,7 @@ if (!$schema_ready) {
 
 if ($schema_ready) {
     $patient_result = $conn->query(
-        "SELECT id, first_name, last_name, email FROM users WHERE role_id = 2 AND patient_id = 23 ORDER BY first_name, last_name"
+        "SELECT id, first_name, last_name, email FROM users WHERE role_id = 2 AND patient_id = " . PATIENT_SCOPE_ID . " ORDER BY first_name, last_name"
     );
     if ($patient_result) {
         while ($patient = $patient_result->fetch_assoc()) {
@@ -222,7 +222,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_bprs']) && $sc
 
         if ($error_msg === '' && empty($score_errors)) {
             $patient_stmt = $conn->prepare(
-                'SELECT id FROM users WHERE id = ? AND role_id = 2 LIMIT 1'
+                'SELECT id FROM users WHERE id = ? AND role_id = 2 AND patient_id = ' . PATIENT_SCOPE_ID . ' LIMIT 1'
             );
             if (!$patient_stmt) {
                 error_log('BPRS patient validation prepare failed: ' . $conn->error);
@@ -291,63 +291,89 @@ require 'layout/base.php';
 ?>
 
 <style>
+    :root {
+        --teal-primary: #0f766e;
+        --teal-hover: #115e59;
+        --teal-light: #f0fdfa;
+        --border-color: #e2e8f0;
+        --text-main: #0f172a;
+        --text-muted: #64748b;
+    }
     .bprs-page { max-width: 1440px; margin: 0 auto; padding: 28px 20px 42px; }
-    .bprs-header-card { position: sticky; top: 72px; z-index: 25; display: flex; justify-content: space-between; align-items: center; gap: 20px; margin-bottom: 24px; padding: 18px 24px; border-radius: 14px; background: linear-gradient(135deg, #1e293b, #334155); color: #fff; box-shadow: 0 10px 25px -5px rgba(15, 23, 42, .15); }
-    .bprs-header-card h1 { margin: 0 0 5px; color: #fff; font-size: 21px; font-weight: 800; }
-    .bprs-header-card p { margin: 0; color: rgba(255,255,255,.72); font-size: 12px; }
-    .bprs-header-score { min-width: 120px; padding: 8px 13px; border: 1px solid rgba(255,255,255,.14); border-radius: 10px; background: rgba(255,255,255,.08); text-align: center; }
-    .bprs-header-score small { display: block; color: rgba(255,255,255,.68); font-size: 11px; }
-    .bprs-header-score strong { font-size: 23px; }
+    
+    /* Header Card Matching Screenshot */
+    .bprs-header-card { position: sticky; top: 72px; z-index: 25; display: flex; justify-content: space-between; align-items: center; gap: 20px; margin-bottom: 24px; padding: 20px 24px; border-radius: 12px; background: #fff; border: 1px solid var(--border-color); box-shadow: 0 2px 8px rgba(0,0,0,.03); }
+    .bprs-header-card h1 { margin: 0 0 4px; color: var(--teal-primary); font-size: 20px; font-weight: 800; }
+    .bprs-header-card p { margin: 0; color: var(--text-muted); font-size: 12px; }
+    .bprs-header-score { min-width: 120px; padding: 8px 14px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--teal-light); text-align: center; }
+    .bprs-header-score small { display: block; color: var(--text-muted); font-size: 10px; font-weight: 700; text-transform: uppercase; }
+    .bprs-header-score strong { font-size: 22px; color: var(--teal-primary); }
+
+    /* Toast Notifications */
     .bprs-toast { position: fixed; top: 14px; right: 16px; z-index: 1100; display: flex; width: min(360px, calc(100vw - 32px)); align-items: center; gap: 13px; overflow: hidden; padding: 12px 16px; border-radius: 6px; color: #fff; box-shadow: 0 4px 12px rgba(15,23,42,.2); opacity: 1; transform: translateY(0); transition: opacity .25s ease, transform .25s ease; }
-    .bprs-toast-success { background: #19c99a; }
+    .bprs-toast-success { background: #0f766e; }
     .bprs-toast-error { background: #dc3545; }
     .bprs-toast.is-hiding { opacity: 0; transform: translateY(-8px); }
-    .bprs-toast-icon { display: grid; width: 40px; height: 40px; flex: 0 0 auto; place-items: center; border: 4px solid rgba(255,255,255,.9); border-radius: 50%; font-size: 20px; }
+    .bprs-toast-icon { display: grid; width: 36px; height: 36px; flex: 0 0 auto; place-items: center; border: 3px solid rgba(255,255,255,.9); border-radius: 50%; font-size: 16px; }
     .bprs-toast-copy { min-width: 0; }
-    .bprs-toast-title { margin-right: 8px; font-size: 17px; font-weight: 800; }
-    .bprs-toast-message { font-size: 13px; }
-    .bprs-toast-progress { position: absolute; right: 0; bottom: 0; left: 0; height: 4px; background: rgba(255,255,255,.35); transform: scaleX(0); transform-origin: left; animation: bprs-toast-progress 3s linear forwards; }
+    .bprs-toast-title { margin-right: 8px; font-size: 15px; font-weight: 800; }
+    .bprs-toast-message { font-size: 12.5px; }
+    .bprs-toast-progress { position: absolute; right: 0; bottom: 0; left: 0; height: 3px; background: rgba(255,255,255,.35); transform: scaleX(0); transform-origin: left; animation: bprs-toast-progress 3s linear forwards; }
     @keyframes bprs-toast-progress { to { transform: scaleX(1); } }
-    @media (prefers-reduced-motion: reduce) { .bprs-toast { transition: none; } .bprs-toast-progress { animation: none; } }
-    .score-question-error { display: none; margin: 8px 0 0; color: #dc3545; font-size: 12px; font-weight: 700; }
-    .symptom-card.has-score-error .checkbox-scale-group { border-color: #dc3545; }
-    .symptom-card.has-score-error .score-question-error { display: block; }
-    .bprs-scale-legend { position: sticky; top: 10px; z-index: 20; margin-bottom: 24px; padding: 15px 18px; border: 1px solid #e2e8f0; border-left: 5px solid #4f46e5; border-radius: 12px; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.03); }
-    .bprs-scale-legend-title { margin-bottom: 10px; color: #334155; font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
-    .bprs-scale-badges { display: flex; flex-wrap: wrap; gap: 7px; }
-    .bprs-scale-badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 1px solid #cbd5e1; border-radius: 20px; background: #f1f5f9; color: #334155; font-size: 11px; font-weight: 600; }
-    .bprs-scale-badge b { display: inline-grid; width: 20px; height: 20px; place-items: center; border-radius: 50%; background: #4f46e5; color: #fff; font-size: 10px; }
-    .bprs-alert { margin-bottom: 20px; padding: 13px 16px; border-radius: 9px; font-size: 13px; }
-    .bprs-alert.success { border: 1px solid #bbf7d0; background: #f0fdf4; color: #166534; }
-    .bprs-alert.error { border: 1px solid #fecaca; background: #fef2f2; color: #991b1b; }
-    .patient-info-card { margin-bottom: 24px; padding: 22px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.03); }
-    .patient-info-card .form-label { margin-bottom: 7px; color: #475569; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
-    .patient-info-card .form-control, .patient-info-card .form-select { min-height: 44px; padding: 9px 13px; border-color: #cbd5e1; border-radius: 8px; font-size: 13px; }
-    .patient-info-card .form-control:focus, .patient-info-card .form-select:focus { border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79,70,229,.15); }
-    .symptom-card { display: flex; height: 100%; flex-direction: column; justify-content: space-between; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; box-shadow: 0 2px 5px rgba(0,0,0,.02); transition: border-color .2s ease, box-shadow .2s ease, background .2s ease; }
-    .symptom-card:hover { border-color: #cbd5e1; box-shadow: 0 8px 20px rgba(15,23,42,.06); }
-    .symptom-card.rated-active { border-color: #818cf8; background: #fafafe; }
-    .symptom-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 7px; color: #0f172a; font-size: 13px; font-weight: 800; }
-    .symptom-title-text { line-height: 1.5; }
-    .selected-score-pill { flex: 0 0 auto; padding: 4px 9px; border-radius: 6px; background: #e0e7ff; color: #4338ca; font-size: 10px; font-weight: 800; white-space: nowrap; }
-    .symptom-desc { margin-bottom: 15px; color: #64748b; font-size: 12px; line-height: 1.55; }
-    .checkbox-scale-group { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; padding: 10px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; }
-    .score-checkbox-item { position: relative; display: flex; min-width: 0; min-height: 39px; align-items: center; padding: 6px 7px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; cursor: pointer; user-select: none; transition: background .15s ease, border-color .15s ease; }
-    .score-checkbox-item:hover { border-color: #4f46e5; background: #f5f3ff; }
-    .score-checkbox-item input { width: 15px; height: 15px; flex: 0 0 auto; margin: 0 6px 0 0; accent-color: #4f46e5; cursor: pointer; }
-    .score-checkbox-item:focus-within { outline: 3px solid rgba(79,70,229,.2); outline-offset: 1px; }
-    .score-checkbox-item .score-num { margin-right: 4px; color: #1e293b; font-size: 12px; font-weight: 800; }
-    .score-checkbox-item .score-text { overflow: hidden; color: #64748b; font-size: 9px; line-height: 1.15; text-overflow: ellipsis; white-space: nowrap; }
-    .score-checkbox-item.active-check { border-color: #4f46e5; background: #eef2ff; box-shadow: 0 0 0 1px #4f46e5; }
-    .score-checkbox-item.active-check .score-num, .score-checkbox-item.active-check .score-text { color: #3730a3; font-weight: 700; }
-    .bprs-footer-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 15px; margin-top: 28px; padding: 18px 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; box-shadow: 0 -4px 20px rgba(0,0,0,.05); }
+
+    /* Scale Legend */
+    .bprs-scale-legend { position: sticky; top: 10px; z-index: 20; margin-bottom: 24px; padding: 14px 18px; border: 1px solid var(--border-color); border-left: 4px solid var(--teal-primary); border-radius: 10px; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.02); }
+    .bprs-scale-legend-title { margin-bottom: 8px; color: var(--text-main); font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+    .bprs-scale-badges { display: flex; flex-wrap: wrap; gap: 6px; }
+    .bprs-scale-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--border-color); border-radius: 16px; background: #f8fafc; color: var(--text-main); font-size: 11px; font-weight: 600; }
+    .bprs-scale-badge b { display: inline-grid; width: 18px; height: 18px; place-items: center; border-radius: 50%; background: var(--teal-primary); color: #fff; font-size: 9.5px; }
+
+    /* Metadata Card */
+    .patient-info-card { margin-bottom: 24px; padding: 20px; border: 1px solid var(--border-color); border-radius: 12px; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.02); }
+    .patient-info-card .form-label { margin-bottom: 6px; color: var(--text-muted); font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+    .patient-info-card .form-control, .patient-info-card .form-select { min-height: 40px; padding: 8px 12px; border-color: var(--border-color); border-radius: 8px; font-size: 13px; }
+    .patient-info-card .form-control:focus, .patient-info-card .form-select:focus { border-color: var(--teal-primary); box-shadow: 0 0 0 3px rgba(15,118,110,.12); }
+
+    /* Unified Questions Card container */
+    .unified-questions-card { border: 1px solid var(--border-color); border-radius: 12px; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.02); overflow: hidden; margin-bottom: 24px; }
+    .unified-questions-header { padding: 16px 20px; border-bottom: 1px solid var(--border-color); background: #f8fafc; color: var(--text-main); font-weight: 800; font-size: 13px; text-transform: uppercase; letter-spacing: .03em; }
+    
+    /* Individual Question Row inside Unified Card */
+    .symptom-row { padding: 20px; border-bottom: 1px solid var(--border-color); transition: background .15s ease; }
+    .symptom-row:last-child { border-bottom: none; }
+    .symptom-row.rated-active { background: var(--teal-light); }
+    .symptom-row.has-score-error { background: #fef2f2; border-left: 4px solid #dc3545; }
+    
+    .symptom-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 6px; color: var(--text-main); font-size: 13px; font-weight: 800; }
+    .symptom-title-text { line-height: 1.4; }
+    .selected-score-pill { flex: 0 0 auto; padding: 3px 8px; border-radius: 6px; background: #e2e8f0; color: var(--text-main); font-size: 10px; font-weight: 800; white-space: nowrap; }
+    .symptom-row.rated-active .selected-score-pill { background: #ccfbf1; color: var(--teal-primary); }
+    .symptom-desc { margin-bottom: 12px; color: var(--text-muted); font-size: 12px; line-height: 1.5; }
+    
+    /* Exactly 4 Options per Row */
+    .checkbox-scale-group { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 8px; border: 1px solid var(--border-color); border-radius: 8px; background: #f8fafc; }
+    .score-checkbox-item { position: relative; display: flex; min-width: 0; min-height: 36px; align-items: center; padding: 5px 8px; border: 1px solid var(--border-color); border-radius: 6px; background: #fff; cursor: pointer; user-select: none; transition: background .15s ease, border-color .15s ease; }
+    .score-checkbox-item:hover { border-color: var(--teal-primary); background: #f0fdfa; }
+    .score-checkbox-item input { width: 14px; height: 14px; flex: 0 0 auto; margin: 0 6px 0 0; accent-color: var(--teal-primary); cursor: pointer; }
+    .score-checkbox-item .score-num { margin-right: 4px; color: var(--text-main); font-size: 11.5px; font-weight: 800; }
+    .score-checkbox-item .score-text { overflow: hidden; color: var(--text-muted); font-size: 11px; line-height: 1.15; text-overflow: ellipsis; white-space: nowrap; }
+    .score-checkbox-item.active-check { border-color: var(--teal-primary); background: #ccfbf1; box-shadow: 0 0 0 1px var(--teal-primary); }
+    .score-checkbox-item.active-check .score-num, .score-checkbox-item.active-check .score-text { color: #134e4a; font-weight: 700; }
+    
+    .score-question-error { display: none; margin: 6px 0 0; color: #dc3545; font-size: 11px; font-weight: 700; }
+    .symptom-row.has-score-error .score-question-error { display: block; }
+
+    /* Footer Action Bar */
+    .bprs-footer-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 15px; margin-top: 24px; padding: 18px 24px; border: 1px solid var(--border-color); border-radius: 12px; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.02); }
     .total-score-box { display: flex; align-items: center; gap: 14px; }
-    .total-score-number { min-width: 78px; padding: 6px 15px; border: 1px solid #c7d2fe; border-radius: 10px; background: #eef2ff; color: #4f46e5; font-size: 27px; font-weight: 800; text-align: center; }
-    .bprs-save-button { border-color: #4f46e5 !important; background: #4f46e5 !important; }
-    .bprs-save-button:hover { border-color: #4338ca !important; background: #4338ca !important; }
-    .bprs-disclaimer { margin: 0; padding: 12px 20px; border-top: 1px solid #e2e8f0; background: #f8fafc; color: #64748b; font-size: 11px; line-height: 1.5; }
+    .total-score-number { min-width: 72px; padding: 6px 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--teal-light); color: var(--teal-primary); font-size: 24px; font-weight: 800; text-align: center; }
+    .bprs-save-button { border-color: var(--teal-primary) !important; background: var(--teal-primary) !important; }
+    .bprs-save-button:hover { border-color: var(--teal-hover) !important; background: var(--teal-hover) !important; }
+    
+    .bprs-disclaimer { margin: 16px 0 0; padding: 0 4px; color: var(--text-muted); font-size: 11px; line-height: 1.5; }
+
     @media (max-width: 991.98px) { .checkbox-scale-group { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-    @media (max-width: 575.98px) { .bprs-page { padding: 20px 12px 30px; } .bprs-header-card { align-items: flex-start; flex-direction: column; padding: 16px 18px; } .bprs-header-card h1 { font-size: 19px; } .bprs-header-score { width: 100%; text-align: left; } .bprs-scale-legend { position: static; } .patient-info-card { padding: 16px; } .bprs-footer-bar { align-items: stretch; flex-direction: column; padding: 16px; } .bprs-footer-bar .action-buttons { display: grid !important; grid-template-columns: 1fr; width: 100%; } }
+    @media (max-width: 575.98px) { .bprs-page { padding: 16px 10px 24px; } .bprs-header-card { flex-direction: column; align-items: flex-start; padding: 16px; } .bprs-header-score { width: 100%; text-align: left; } .bprs-scale-legend { position: static; } .patient-info-card { padding: 16px; } .bprs-footer-bar { flex-direction: column; align-items: stretch; padding: 16px; } .bprs-footer-bar .action-buttons { display: grid !important; grid-template-columns: 1fr; width: 100%; } .checkbox-scale-group { grid-template-columns: 1fr; } }
 </style>
 
 <div class="container-fluid py-4 px-3 px-md-4">
@@ -369,20 +395,20 @@ require 'layout/base.php';
 
         <div class="bprs-header-card">
             <div>
-                <span class="badge mb-2 px-3 py-2" style="background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.2);">
+                <span class="badge mb-1 px-2.5 py-1" style="background:var(--teal-light);color:var(--teal-primary);border:1px solid #ccfbf1;font-size:10.5px;font-weight:700;">
                     <i class="fa-solid fa-notes-medical me-1" aria-hidden="true"></i> Psychiatric Clinical Scale
                 </span>
-                <h1>BRIEF PSYCHIATRIC RATING SCALE (BPRS)</h1>
+                <h1>Brief Psychiatric Rating Scale (BPRS)</h1>
                 <p>Select the rating that best describes the patient's condition for each item.</p>
             </div>
             <div class="bprs-header-score">
-                <small>Live total score</small>
-                <strong id="headerLiveScore">0</strong><span class="text-white-50"> / 126</span>
+                <small>Live Total Score</small>
+                <strong id="headerLiveScore">0</strong><span class="text-muted" style="font-size: 12px;"> / 126</span>
             </div>
         </div>
 
         <div class="bprs-scale-legend">
-            <div class="bprs-scale-legend-title"><i class="fa-solid fa-scale-balanced text-primary me-1" aria-hidden="true"></i> Rating scale key</div>
+            <div class="bprs-scale-legend-title"><i class="fa-solid fa-scale-balanced text-success me-1" aria-hidden="true"></i> Rating scale key</div>
             <div class="bprs-scale-badges">
                 <?php foreach ($rating_scale as $num => $label): ?>
                     <span class="bprs-scale-badge"><b><?php echo (int) $num; ?></b><?php echo bprs_escape($label); ?></span>
@@ -392,10 +418,11 @@ require 'layout/base.php';
 
         <form action="bprs-assessments.php" method="post" id="bprsForm" novalidate>
             <input type="hidden" name="csrf_token" value="<?php echo bprs_escape($_SESSION['bprs_csrf_token']); ?>">
+            
             <section class="patient-info-card" aria-label="Assessment details">
                 <div class="row g-3">
                     <div class="col-md-4">
-                        <label class="form-label" for="patient_id"><i class="fa-regular fa-user me-1 text-primary" aria-hidden="true"></i> Client name <span class="text-danger">*</span></label>
+                        <label class="form-label" for="patient_id"><i class="fa-regular fa-user me-1" aria-hidden="true"></i> Client name <span class="text-danger">*</span></label>
                         <select id="patient_id" name="patient_id" class="form-select" required>
                             <option value="" disabled selected>Select a patient</option>
                             <?php foreach ($patients as $patient): ?>
@@ -404,32 +431,38 @@ require 'layout/base.php';
                                 $patient_label = $patient_name !== '' ? $patient_name : ($patient['email'] ?? 'Patient');
                                 ?>
                                 <option value="<?php echo (int) $patient['id']; ?>" data-client-name="<?php echo bprs_escape($patient_label); ?>" <?php echo $form_patient_id === (int) $patient['id'] ? 'selected' : ''; ?>>
-                                    <?php echo bprs_escape($patient_label); ?> 
+                                    <?php echo bprs_escape($patient_label); ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>
                     </div>
                     <div class="col-md-2">
-                        <label class="form-label" for="assessment_date"><i class="fa-regular fa-calendar me-1 text-primary" aria-hidden="true"></i> Date <span class="text-danger">*</span></label>
+                        <label class="form-label" for="assessment_date"><i class="fa-regular fa-calendar me-1" aria-hidden="true"></i> Date <span class="text-danger">*</span></label>
                         <input type="date" id="assessment_date" name="assessment_date" class="form-control" value="<?php echo bprs_escape($form_date); ?>" required>
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label" for="md_name"><i class="fa-solid fa-user-doctor me-1 text-primary" aria-hidden="true"></i> MD / Clinician</label>
-                        <input type="text" id="md_name" class="form-control" value="<?php echo bprs_escape($clinician_name); ?>" placeholder="Signed-in clinician" readonly>
+                        <label class="form-label" for="md_name"><i class="fa-solid fa-user-doctor me-1" aria-hidden="true"></i> MD / Clinician</label>
+                        <input type="text" id="md_name" class="form-control bg-light" value="<?php echo bprs_escape($clinician_name); ?>" placeholder="Signed-in clinician" readonly>
                     </div>
                 </div>
             </section>
 
-            <div class="row g-4">
-                <?php foreach ($bprs_items as $index => $item): ?>
-                    <?php $field = $item['field']; ?>
-                    <div class="col-12">
-                        <fieldset class="symptom-card<?php echo !empty($score_errors[$field]) ? ' has-score-error' : ''; ?>" id="card_<?php echo bprs_escape($field); ?>">
-                            <legend class="symptom-title">
+            <!-- Unified Single Card Container for All 18 Items -->
+            <div class="unified-questions-card">
+                <div class="unified-questions-header">
+                    <i class="fa-solid fa-list-check me-1"></i> Assessment Questions (18 Items)
+                </div>
+                <div>
+                    <?php foreach ($bprs_items as $index => $item): ?>
+                        <?php $field = $item['field']; ?>
+                        <div class="symptom-row<?php echo !empty($score_errors[$field]) ? ' has-score-error' : ''; ?>" id="card_<?php echo bprs_escape($field); ?>">
+                            <div class="symptom-title">
                                 <span class="symptom-title-text"><?php echo bprs_escape($item['title']); ?></span>
                                 <span class="selected-score-pill" id="badge_<?php echo bprs_escape($field); ?>">Score: 0</span>
-                            </legend>
+                            </div>
                             <p class="symptom-desc"><?php echo bprs_escape($item['desc']); ?></p>
+                            
+                            <!-- 4-Column Layout Group for Options -->
                             <div class="checkbox-scale-group" data-field="<?php echo bprs_escape($field); ?>">
                                 <?php foreach ($rating_scale as $score_val => $score_text): ?>
                                     <?php
@@ -454,13 +487,13 @@ require 'layout/base.php';
                                 <?php endforeach; ?>
                             </div>
                             <p class="score-question-error" id="error_<?php echo bprs_escape($field); ?>" role="alert"><?php echo bprs_escape($score_errors[$field] ?? ''); ?></p>
-                        </fieldset>
-                    </div>
-                <?php endforeach; ?>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
             </div>
 
-            <section class="patient-info-card mt-4 mb-0">
-                <label class="form-label" for="clinical_notes"><i class="fa-regular fa-note-sticky me-1 text-primary" aria-hidden="true"></i> Clinical notes <span class="text-muted fw-normal">(optional)</span></label>
+            <section class="patient-info-card mb-0">
+                <label class="form-label" for="clinical_notes"><i class="fa-regular fa-note-sticky me-1" aria-hidden="true"></i> Clinical notes <span class="text-muted fw-normal">(optional)</span></label>
                 <textarea id="clinical_notes" name="clinical_notes" class="form-control" rows="3" maxlength="5000" placeholder="Add relevant clinician notes..."><?php echo bprs_escape($form_notes); ?></textarea>
             </section>
 

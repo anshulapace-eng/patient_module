@@ -17,7 +17,7 @@ $completed_assessments = [];
 
 if ($patient_id > 0 && isset($conn)) {
     // Fetch Patient Details
-    $p_query = "SELECT id, CONCAT(first_name, ' ', IF(last_name='.', '', last_name)) as full_name, phone, email FROM users WHERE id = ? LIMIT 1";
+    $p_query = "SELECT id, CONCAT(first_name, ' ', IF(last_name='.', '', last_name)) as full_name, phone, email FROM users WHERE id = ? AND role_id = 2 AND patient_id = " . PATIENT_SCOPE_ID . " LIMIT 1";
     if ($stmt_p = $conn->prepare($p_query)) {
         $stmt_p->bind_param("i", $patient_id);
         $stmt_p->execute();
@@ -30,6 +30,9 @@ if ($patient_id > 0 && isset($conn)) {
         a.title, a.description
         FROM assigned_assessments aa
         INNER JOIN assessments a ON a.id = aa.assessment_id
+        INNER JOIN users u ON u.id = aa.patient_id
+            AND u.role_id = 2
+            AND u.patient_id = " . PATIENT_SCOPE_ID . "
         WHERE aa.patient_id = ? ORDER BY aa.id ASC";
     if ($stmt_c = $conn->prepare($assigned_query)) {
         $stmt_c->bind_param("i", $patient_id);

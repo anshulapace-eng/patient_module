@@ -34,6 +34,43 @@ $items = [
 ];
 $records = [];
 $load_error = '';
+$action_success = '';
+$action_error = '';
+
+if (!isset($_SESSION['bprs_csrf_token'])) {
+    $_SESSION['bprs_csrf_token'] = bin2hex(random_bytes(32));
+}
+
+// Handle Delete Request
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_assessment'])) {
+    $posted_token = $_POST['csrf_token'] ?? '';
+    $assessment_id = filter_var($_POST['assessment_id'] ?? null, FILTER_VALIDATE_INT);
+
+    if (!is_string($posted_token) || !hash_equals($_SESSION['bprs_csrf_token'], $posted_token)) {
+        $action_error = 'Your session token expired. Please try again.';
+    } elseif ($assessment_id === false || $assessment_id < 1) {
+        $action_error = 'Invalid assessment reference.';
+    } else {
+        $del_stmt = $conn->prepare("DELETE FROM bprs_assessments WHERE id = ? LIMIT 1");
+        if ($del_stmt) {
+            $del_stmt->bind_param('i', $assessment_id);
+            if ($del_stmt->execute()) {
+                $del_stmt->close();
+                $_SESSION['bprs_action_success'] = 'BPRS assessment record deleted successfully.';
+                $_SESSION['bprs_csrf_token'] = bin2hex(random_bytes(32));
+                header('Location: ' . $_SERVER['PHP_SELF']);
+                exit;
+            }
+            $del_stmt->close();
+        }
+        $action_error = 'Failed to delete assessment record. Please try again.';
+    }
+}
+
+if (isset($_SESSION['bprs_action_success'])) {
+    $action_success = $_SESSION['bprs_action_success'];
+    unset($_SESSION['bprs_action_success']);
+}
 
 function bprs_records_escape($value)
 {
@@ -45,7 +82,9 @@ $records_query = "SELECT b.id, b.patient_id, b.clinician_id, b.assessment_date, 
         TRIM(CONCAT(COALESCE(p.first_name, ''), ' ', COALESCE(NULLIF(p.last_name, '.'), ''))) AS patient_name,
         TRIM(CONCAT(COALESCE(c.first_name, ''), ' ', COALESCE(NULLIF(c.last_name, '.'), ''))) AS clinician_name
     FROM bprs_assessments b
-    LEFT JOIN users p ON p.id = b.patient_id
+    INNER JOIN users p ON p.id = b.patient_id
+        AND p.role_id = 2
+        AND p.patient_id = " . PATIENT_SCOPE_ID . "
     LEFT JOIN users c ON c.id = b.clinician_id
     ORDER BY b.assessment_date DESC, b.id DESC";
 $records_result = $conn->query($records_query);
@@ -82,6 +121,8 @@ require 'layout/base.php';
     .records-score { display: inline-flex; min-width: 68px; justify-content: center; padding: 5px 9px; border-radius: 6px; background: #eef2ff; color: #4338ca; font-weight: 800; white-space: nowrap; }
     .view-score-button { padding: 6px 10px; border: 1px solid #c7d2fe; border-radius: 7px; background: #fff; color: #4338ca; font-size: 12px; font-weight: 700; }
     .view-score-button:hover { background: #eef2ff; }
+    .delete-score-button { padding: 6px 10px; border: 1px solid #fecaca; border-radius: 7px; background: #fff; color: #dc3545; font-size: 12px; font-weight: 700; }
+    .delete-score-button:hover { background: #fef2f2; }
     .records-empty, .records-error { padding: 36px 20px; color: #64748b; font-size: 13px; text-align: center; }
     .records-error { color: #991b1b; }
     .score-modal-total { display: inline-flex; padding: 6px 11px; border-radius: 7px; background: #eef2ff; color: #4338ca; font-weight: 800; }
@@ -92,6 +133,19 @@ require 'layout/base.php';
 
 <div class="container-fluid py-4 px-3 px-md-4">
     <div class="bprs-records-page">
+        <?php if ($action_success !== ''): ?>
+            <div class="alert alert-success alert-dismissible fade show mb-4" role="alert">
+                <i class="bi bi-check-circle-fill me-2"></i><?php echo bprs_records_escape($action_success); ?>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        <?php endif; ?>
+        <?php if ($action_error !== ''): ?>
+            <div class="alert alert-danger alert-dismissible fade show mb-4" role="alert">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i><?php echo bprs_records_escape($action_error); ?>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        <?php endif; ?>
+
         <div class="records-header">
             <div>
                 <h1>BPRS Assessment Records</h1>
@@ -140,19 +194,28 @@ require 'layout/base.php';
                                     <td><span class="records-score"><?php echo (int) $record['total_score']; ?> / 126</span></td>
                                     <td><?php echo bprs_records_escape($clinician); ?></td>
                                     <td>
-                                        <button
-                                            type="button"
-                                            class="view-score-button"
-                                            data-bs-toggle="modal"
-                                            data-bs-target="#bprsScoreModal"
-                                            data-client="<?php echo bprs_records_escape($client_name); ?>"
-                                            data-date="<?php echo bprs_records_escape(date('d M Y', strtotime($record['assessment_date']))); ?>"
-                                            data-clinician="<?php echo bprs_records_escape($clinician); ?>"
-                                            data-total="<?php echo (int) $record['total_score']; ?>"
-                                            data-notes="<?php echo bprs_records_escape($record['clinical_notes'] ?? ''); ?>"
-                                            data-scores="<?php echo bprs_records_escape(json_encode($modal_scores, JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_HEX_TAG)); ?>">
-                                            <i class="bi bi-eye me-1" aria-hidden="true"></i> View score
-                                        </button>
+                                        <div class="d-flex align-items-center gap-1">
+                                            <button
+                                                type="button"
+                                                class="view-score-button"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#bprsScoreModal"
+                                                data-client="<?php echo bprs_records_escape($client_name); ?>"
+                                                data-date="<?php echo bprs_records_escape(date('d M Y', strtotime($record['assessment_date']))); ?>"
+                                                data-clinician="<?php echo bprs_records_escape($clinician); ?>"
+                                                data-total="<?php echo (int) $record['total_score']; ?>"
+                                                data-notes="<?php echo bprs_records_escape($record['clinical_notes'] ?? ''); ?>"
+                                                data-scores="<?php echo bprs_records_escape(json_encode($modal_scores, JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_HEX_TAG)); ?>">
+                                                <i class="bi bi-eye me-1" aria-hidden="true"></i> View
+                                            </button>
+                                            <form action="" method="post" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this assessment record?');">
+                                                <input type="hidden" name="csrf_token" value="<?php echo bprs_records_escape($_SESSION['bprs_csrf_token']); ?>">
+                                                <input type="hidden" name="assessment_id" value="<?php echo (int) $record['id']; ?>">
+                                                <button type="submit" name="delete_assessment" value="1" class="delete-score-button">
+                                                    <i class="bi bi-trash me-1" aria-hidden="true"></i> Delete
+                                                </button>
+                                            </form>
+                                        </div>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
@@ -214,9 +277,9 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
-                document.getElementById('bprsModalPatient').textContent = button.dataset.client;
-                document.getElementById('bprsModalDate').textContent = button.dataset.date;
-                document.getElementById('bprsModalClinician').textContent = 'Doctor: ' + button.dataset.clinician;
+        document.getElementById('bprsModalPatient').textContent = button.dataset.client;
+        document.getElementById('bprsModalDate').textContent = button.dataset.date;
+        document.getElementById('bprsModalClinician').textContent = 'Doctor: ' + button.dataset.clinician;
         document.getElementById('bprsModalTotal').textContent = button.dataset.total;
 
         var scoreBody = document.getElementById('bprsModalScores');

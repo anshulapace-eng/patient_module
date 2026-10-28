@@ -8,4 +8,8 @@ if ($mysqli->connect_errno) {
 }
 
 $conn = $mysqli;
+
+if (!defined('PATIENT_SCOPE_ID')) {
+    define('PATIENT_SCOPE_ID', 23);
+}
 ?>

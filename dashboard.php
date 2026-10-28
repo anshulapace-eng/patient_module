@@ -20,10 +20,10 @@ $recent_assignments = [];
 
 if (isset($conn)) {
     $stats_query = "SELECT
-        (SELECT COUNT(*) FROM users WHERE role_id = 2) AS patients,
-        (SELECT COUNT(*) FROM assigned_assessments) AS assigned,
-        (SELECT COUNT(*) FROM assigned_assessments WHERE status = 'completed') AS completed,
-        (SELECT COUNT(*) FROM assigned_assessments WHERE status IS NULL OR status <> 'completed') AS pending";
+        (SELECT COUNT(*) FROM users WHERE role_id = 2 AND patient_id = " . PATIENT_SCOPE_ID . ") AS patients,
+        (SELECT COUNT(*) FROM assigned_assessments aa INNER JOIN users u ON u.id = aa.patient_id WHERE u.role_id = 2 AND u.patient_id = " . PATIENT_SCOPE_ID . ") AS assigned,
+        (SELECT COUNT(*) FROM assigned_assessments aa INNER JOIN users u ON u.id = aa.patient_id WHERE u.role_id = 2 AND u.patient_id = " . PATIENT_SCOPE_ID . " AND aa.status = 'completed') AS completed,
+        (SELECT COUNT(*) FROM assigned_assessments aa INNER JOIN users u ON u.id = aa.patient_id WHERE u.role_id = 2 AND u.patient_id = " . PATIENT_SCOPE_ID . " AND (aa.status IS NULL OR aa.status <> 'completed')) AS pending";
     if ($stats_result = $conn->query($stats_query)) {
         $stats = $stats_result->fetch_assoc() ?: $stats;
     }
@@ -33,6 +33,8 @@ if (isset($conn)) {
         u.phone, a.title
         FROM assigned_assessments aa
         INNER JOIN users u ON u.id = aa.patient_id
+            AND u.role_id = 2
+            AND u.patient_id = " . PATIENT_SCOPE_ID . "
         INNER JOIN assessments a ON a.id = aa.assessment_id
         ORDER BY aa.id DESC
         LIMIT 8";

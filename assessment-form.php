@@ -38,7 +38,7 @@ if ($assessment_id <= 0 || $patient_id_get <= 0 || !isset($conn)) {
 
 // Security Check: Confirm karein ki ye assignment actually exist karti hai
 if ($assignment_id_get > 0) {
-    $assignment_query = "SELECT id FROM assigned_assessments WHERE id = ? AND patient_id = ? AND assessment_id = ? LIMIT 1";
+    $assignment_query = "SELECT aa.id FROM assigned_assessments aa INNER JOIN users u ON u.id = aa.patient_id AND u.role_id = 2 AND u.patient_id = " . PATIENT_SCOPE_ID . " WHERE aa.id = ? AND aa.patient_id = ? AND aa.assessment_id = ? LIMIT 1";
     if ($assignment_stmt = $conn->prepare($assignment_query)) {
         $assignment_stmt->bind_param("iii", $assignment_id_get, $patient_id_get, $assessment_id);
         $assignment_stmt->execute();
@@ -118,22 +118,29 @@ $form_assignment_id = $lms_mode
 
 // ================= FETCH PATIENT DETAILS AUTOMATICALLY =================
 if ($patient_id_get > 0 && isset($conn)) {
-    $patient_query = "SELECT first_name, last_name, phone, email FROM users WHERE id = ? LIMIT 1";
-    if ($stmt_p = $conn->prepare($patient_query)) {
-        $stmt_p->bind_param("i", $patient_id_get);
-        $stmt_p->execute();
-        $p_res = $stmt_p->get_result();
-        if ($p_row = $p_res->fetch_assoc()) {
-            $user_name = trim(($p_row['first_name'] ?? '') . ' ' . ($p_row['last_name'] ?? ''));
-            if ($user_name === '' && !empty($p_row['email'])) {
-                $email_parts = explode('@', $p_row['email']);
-                $user_name = $email_parts[0];
-            }
-            $user_mobile = $p_row['phone'] ?? '';
-            $user_email = $p_row['email'] ?? '';
-        }
-        $stmt_p->close();
+    $patient_query = "SELECT first_name, last_name, phone, email FROM users WHERE id = ? AND role_id = 2 AND patient_id = " . PATIENT_SCOPE_ID . " LIMIT 1";
+    $stmt_p = $conn->prepare($patient_query);
+    if (!$stmt_p) {
+        error_log('Assessment patient lookup prepare failed: ' . $conn->error);
+        die("<div style='text-align:center; padding: 50px; font-family: sans-serif;'><h2>Unable to Validate Patient</h2><p>Please try again later.</p></div>");
     }
+
+    $stmt_p->bind_param("i", $patient_id_get);
+    $stmt_p->execute();
+    $p_res = $stmt_p->get_result();
+    if ($p_row = $p_res->fetch_assoc()) {
+        $user_name = trim(($p_row['first_name'] ?? '') . ' ' . ($p_row['last_name'] ?? ''));
+        if ($user_name === '' && !empty($p_row['email'])) {
+            $email_parts = explode('@', $p_row['email']);
+            $user_name = $email_parts[0];
+        }
+        $user_mobile = $p_row['phone'] ?? '';
+        $user_email = $p_row['email'] ?? '';
+    } else {
+        $stmt_p->close();
+        die("<div style='text-align:center; padding: 50px; font-family: sans-serif;'><h2>Invalid Patient Link</h2><p>This patient could not be found.</p></div>");
+    }
+    $stmt_p->close();
 }
 
 // Fallback agar POST request aati hai

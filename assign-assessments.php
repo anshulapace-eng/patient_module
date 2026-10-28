@@ -68,12 +68,16 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['assign_assessments']))
 
             // Agar koi error nahi hai toh naya user insert karein
             if (empty($error_msg)) {
-                $stmt_ins =$conn->prepare("INSERT INTO users (first_name, last_name, phone, email, address, password, status, role_id) VALUES (?, ?, ?, ?, ?, ?, 1, 2)");
+                $stmt_ins =$conn->prepare("INSERT INTO users (first_name, last_name, phone, email, address, password, status, role_id, patient_id) VALUES (?, ?, ?, ?, ?, ?, 1, 2, " . PATIENT_SCOPE_ID . ")");
                 if ($stmt_ins) {$stmt_ins->bind_param("ssssss", $first_name,$last_name, $phone,$email, $address,$password_to_store);
                     if ($stmt_ins->execute()) {
                         $patient_id =$conn->insert_id;
+                    } else {
+                        $error_msg = "The patient could not be registered. Please try again.";
                     }
                     $stmt_ins->close();
+                } else {
+                    $error_msg = "The patient could not be registered. Please try again.";
                 }
             }
         } else {
@@ -83,6 +87,23 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['assign_assessments']))
         }
 
       
+        if ($patient_id > 0 && empty($error_msg)) {
+            $patient_check = $conn->prepare(
+                "SELECT id FROM users WHERE id = ? AND role_id = 2 AND patient_id = " . PATIENT_SCOPE_ID . " LIMIT 1"
+            );
+            if (!$patient_check) {
+                $error_msg = "The selected patient could not be validated. Please try again.";
+            } else {
+                $patient_check->bind_param("i", $patient_id);
+                $patient_check->execute();
+                $patient_check->store_result();
+                if ($patient_check->num_rows !== 1) {
+                    $error_msg = "Please select a valid patient.";
+                }
+                $patient_check->close();
+            }
+        }
+
         if ($patient_id > 0 && empty($error_msg)) {
             $newly_assigned_count = 0;
             $already_pending_count = 0;

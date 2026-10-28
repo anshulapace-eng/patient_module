@@ -30,6 +30,8 @@ if (isset($conn)) {
         ar.assessment_date AS completed_date
     FROM assigned_assessments aa
     INNER JOIN users u ON u.id = aa.patient_id
+        AND u.role_id = 2
+        AND u.patient_id = " . PATIENT_SCOPE_ID . "
     INNER JOIN assessments a ON a.id = aa.assessment_id
     LEFT JOIN assessment_responses ar ON ar.id = (
         SELECT response.id
