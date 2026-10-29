@@ -17,6 +17,10 @@
             'bprs-assessments.php',
             'bprs-assessment-records.php'
         ], true);
+        $is_ace_iii_active = in_array($current_page, [
+            'ace-iii-assessments.php',
+            'ace-iii-assessment-records.php'
+        ], true);
         $is_panss_active = in_array($current_page, [
             'panss-assessments.php',
             'panss-assessment-records.php'
@@ -91,6 +95,27 @@
                     </li>
                     <li class="nav-item">
                         <a class="nav-link <?= $current_page == 'bprs-assessment-records.php' ? 'active' : ''; ?>" href="bprs-assessment-records.php" <?= $current_page == 'bprs-assessment-records.php' ? 'aria-current="page"' : ''; ?>>
+                            <span class="nav-icon"><i class="bi bi-table" aria-hidden="true"></i></span>
+                            <span class="nav-text">Assessment Records</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            <a class="nav-link <?= $is_ace_iii_active ? 'active' : ''; ?>" data-bs-toggle="collapse" href="#aceIII-collapse" role="button" aria-expanded="<?= $is_ace_iii_active ? 'true' : 'false'; ?>" aria-controls="aceIII-collapse">
+                <span class="nav-icon"><i class="bi bi-clipboard2-pulse" aria-hidden="true"></i></span>
+                <span class="nav-text">ACE-III Assessment</span>
+                <span class="ms-auto collapse-indicator"><i class="bi bi-chevron-down" aria-hidden="true"></i></span>
+            </a>
+            <div class="collapse <?= $is_ace_iii_active ? 'show' : ''; ?>" id="aceIII-collapse">
+                <ul class="nav flex-column ms-3">
+                    <li class="nav-item">
+                        <a class="nav-link <?= $current_page == 'ace-iii-assessments.php' ? 'active' : ''; ?>" href="ace-iii-assessments.php" <?= $current_page == 'ace-iii-assessments.php' ? 'aria-current="page"' : ''; ?>>
+                            <span class="nav-icon"><i class="bi bi-ui-checks" aria-hidden="true"></i></span>
+                            <span class="nav-text">Assessment Form</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link <?= $current_page == 'ace-iii-assessment-records.php' ? 'active' : ''; ?>" href="ace-iii-assessment-records.php" <?= $current_page == 'ace-iii-assessment-records.php' ? 'aria-current="page"' : ''; ?>>
                             <span class="nav-icon"><i class="bi bi-table" aria-hidden="true"></i></span>
                             <span class="nav-text">Assessment Records</span>
                         </a>
