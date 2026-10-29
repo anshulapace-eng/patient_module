@@ -95,7 +95,7 @@ $patient_name = '';
 $clinician_name = '';
 $notes = '';
 $chart_score = 0;
-$chart_percent = 0;
+$chart_remaining = 126;
 
 if ($record) {
     $saved_scores = json_decode($record['score_data'], true);
@@ -115,7 +115,7 @@ if ($record) {
     $clinician_name = trim($record['clinician_name']) ?: 'Unknown clinician';
     $notes = (string) ($record['clinical_notes'] ?? '');
     $chart_score = max(0, min(126, $total_score));
-    $chart_percent = ($chart_score / 126) * 100;
+    $chart_remaining = 126 - $chart_score;
 }
 
 require 'layout/base.php';
@@ -139,10 +139,7 @@ require 'layout/base.php';
     .report-card h2 { margin: 0; color: #172033; font-size: 17px; font-weight: 800; }
     .card-caption { margin: 6px 0 18px; color: #758197; font-size: 12px; }
     .score-summary { display: grid; justify-items: center; padding: 10px 0 14px; text-align: center; }
-    .score-ring { display: grid; width: 190px; height: 190px; place-items: center; border-radius: 50%; background: conic-gradient(#4f46e5 0 <?php echo $chart_percent; ?>%, #e8ecf4 <?php echo $chart_percent; ?>% 100%); }
-    .score-ring-inner { display: grid; width: 148px; height: 148px; align-content: center; justify-items: center; border-radius: 50%; background: #fff; }
-    .score-ring-value { color: #172033; font-size: 39px; font-weight: 850; line-height: 1; }
-    .score-ring-total { margin-top: 7px; color: #8490a3; font-size: 12px; font-weight: 700; }
+    .score-chart-wrap { position: relative; width: 100%; max-width: 340px; height: 260px; margin: 0 auto; }
     .score-summary-label { margin-top: 16px; color: #64748b; font-size: 13px; }
     .summary-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; margin-top: 18px; text-align: left; }
     .summary-stat { padding: 12px; border-radius: 10px; background: #f7f8fc; }
@@ -161,6 +158,7 @@ require 'layout/base.php';
     .report-empty { margin: 28px auto; max-width: 640px; padding: 30px; border: 1px solid #fee2e2; border-radius: 16px; background: #fff; color: #991b1b; text-align: center; }
     .report-empty h1 { margin: 0 0 8px; font-size: 21px; }
     @media (max-width: 760px) { .score-report { padding: 20px 12px 32px; } .report-hero { padding: 24px 20px; } .report-grid { grid-template-columns: 1fr; } .report-card { padding: 18px; } }
+    @media (max-width: 460px) { .score-chart-wrap { height: 230px; } }
     @media (max-width: 460px) { .report-topbar { align-items: stretch; } .report-back, .report-print { justify-content: center; padding: 9px 10px; } .item-row { grid-template-columns: minmax(90px, 1fr) minmax(40px, .7fr) minmax(88px, auto); gap: 8px; } }
     @media print { .report-topbar, .admin-sidebar, .admin-navbar, .sidebar-backdrop { display: none !important; } .score-report { max-width: none; padding: 0; } .report-hero, .report-card { box-shadow: none; break-inside: avoid; } .report-grid { grid-template-columns: .75fr 1.5fr; } body { background: #fff !important; } }
 </style>
@@ -191,11 +189,8 @@ require 'layout/base.php';
                 <h2 id="bprsSummaryTitle">Overall score</h2>
                 <p class="card-caption">Total points compared with the maximum possible score.</p>
                 <div class="score-summary">
-                    <div class="score-ring" role="img" aria-label="BPRS total score: <?php echo $total_score; ?> out of 126">
-                        <div class="score-ring-inner">
-                            <span class="score-ring-value"><?php echo $total_score; ?></span>
-                            <span class="score-ring-total">of 126 points</span>
-                        </div>
+                    <div class="score-chart-wrap">
+                        <canvas id="bprsScoreChart" role="img" aria-label="Pie chart showing <?php echo $total_score; ?> BPRS points scored out of 126"></canvas>
                     </div>
                     <div class="score-summary-label">BPRS total score</div>
                     <div class="summary-stats">
@@ -229,5 +224,44 @@ require 'layout/base.php';
         <?php endif; ?>
     <?php endif; ?>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var canvas = document.getElementById('bprsScoreChart');
+    if (!canvas) {
+        return;
+    }
+
+    new Chart(canvas, {
+        type: 'pie',
+        data: {
+            labels: ['BPRS score', 'Remaining'],
+            datasets: [{
+                data: [<?php echo $chart_score; ?>, <?php echo $chart_remaining; ?>],
+                scores: [<?php echo $chart_score; ?>, <?php echo $chart_remaining; ?>],
+                backgroundColor: ['#4f46e5', '#e8ecf4'],
+                borderColor: '#ffffff',
+                borderWidth: 2,
+                hoverOffset: 10
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom', labels: { usePointStyle: true, padding: 16, color: '#475569', font: { size: 12 } } },
+                tooltip: {
+                    callbacks: {
+                        label: function (context) {
+                            return context.label + ': ' + context.dataset.scores[context.dataIndex] + ' / 126 points';
+                        }
+                    }
+                }
+            }
+        }
+    });
+});
+</script>
 
 <?php require 'layout/footer.php'; ?>

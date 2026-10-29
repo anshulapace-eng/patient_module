@@ -72,7 +72,6 @@ $domain_scores = [];
 $all_scores = [];
 $score_data = [];
 $composite_score = 0;
-$chart_stops = [];
 $chart_colors = ['#4f46e5', '#0ea5e9', '#14b8a6'];
 
 if ($record) {
@@ -114,18 +113,6 @@ if ($record) {
         }
     }
 
-    $domain_sum = array_sum(array_column($domain_scores, 'score'));
-    $chart_position = 0;
-    foreach ($domain_scores as $index => $domain) {
-        $next_position = $domain_sum > 0
-            ? $chart_position + ($domain['score'] / $domain_sum) * 100
-            : $chart_position;
-        $chart_stops[] = $chart_colors[$index] . ' ' . $chart_position . '% ' . $next_position . '%';
-        $chart_position = $next_position;
-    }
-    $chart_background = $domain_sum > 0
-        ? 'conic-gradient(' . implode(', ', $chart_stops) . ')'
-        : '#e8ecf4';
 }
 
 require 'layout/base.php';
@@ -149,10 +136,7 @@ require 'layout/base.php';
     .report-card h2 { margin: 0; color: #172033; font-size: 17px; font-weight: 800; }
     .card-caption { margin: 6px 0 18px; color: #758197; font-size: 12px; }
     .score-summary { display: grid; justify-items: center; padding: 10px 0 14px; text-align: center; }
-    .score-ring { display: grid; width: 190px; height: 190px; place-items: center; border-radius: 50%; }
-    .score-ring-inner { display: grid; width: 148px; height: 148px; align-content: center; justify-items: center; border-radius: 50%; background: #fff; }
-    .score-ring-value { color: #172033; font-size: 36px; font-weight: 850; line-height: 1; }
-    .score-ring-total { margin-top: 7px; color: #8490a3; font-size: 12px; font-weight: 700; }
+    .score-chart-wrap { position: relative; width: 100%; max-width: 340px; height: 260px; margin: 0 auto; }
     .score-summary-label { margin-top: 16px; color: #64748b; font-size: 13px; }
     .domain-legend { display: grid; width: 100%; gap: 11px; margin: 18px 0 0; padding: 0; list-style: none; text-align: left; }
     .domain-legend li { display: grid; grid-template-columns: 12px 1fr auto; align-items: center; gap: 9px; color: #526078; font-size: 12px; }
@@ -187,6 +171,7 @@ require 'layout/base.php';
     .report-empty h1 { margin: 0 0 8px; font-size: 21px; }
     @media (max-width: 800px) { .report-grid { grid-template-columns: 1fr; } .item-groups { grid-template-columns: 1fr; } }
     @media (max-width: 760px) { .score-report { padding: 20px 12px 32px; } .report-hero { padding: 24px 20px; } .report-card { padding: 18px; } }
+    @media (max-width: 460px) { .score-chart-wrap { height: 230px; } }
     @media (max-width: 460px) { .report-topbar { align-items: stretch; } .report-back, .report-print { justify-content: center; padding: 9px 10px; } .item-row { grid-template-columns: minmax(90px, 1fr) minmax(35px, .6fr) minmax(88px, auto); gap: 7px; } }
     @media (max-width: 460px) { .composite-card { align-items: flex-start; padding: 15px; } .composite-copy { gap: 10px; } .composite-value { min-width: 70px; padding: 8px 10px; font-size: 25px; } }
     @media print { .report-topbar, .admin-sidebar, .admin-navbar, .sidebar-backdrop { display: none !important; } .score-report { max-width: none; padding: 0; } .report-hero, .report-card, .item-group { box-shadow: none; break-inside: avoid; } body { background: #fff !important; } }
@@ -218,12 +203,10 @@ require 'layout/base.php';
                 <h2 id="panssSummaryTitle">Scale score distribution</h2>
                 <p class="card-caption">Share of the summed positive, negative and general scores.</p>
                 <div class="score-summary">
-                    <div class="score-ring" role="img" aria-label="PANSS scale score breakdown: <?php echo panss_score_escape(implode(', ', array_map(function ($domain) { return $domain['title'] . ' ' . $domain['score']; }, $domain_scores))); ?>" style="background:<?php echo panss_score_escape($chart_background); ?>">
-                        <div class="score-ring-inner">
-                            <span class="score-ring-value"><?php echo array_sum(array_column($domain_scores, 'score')); ?></span>
-                            <span class="score-ring-total">combined points</span>
-                        </div>
+                    <div class="score-chart-wrap">
+                        <canvas id="panssScoreChart" role="img" aria-label="Pie chart showing PANSS Positive, Negative and General scale scores"></canvas>
                     </div>
+                    <div class="score-summary-label">Combined score: <?php echo array_sum(array_column($domain_scores, 'score')); ?> points</div>
                     <ul class="domain-legend" aria-label="Score distribution legend">
                         <?php foreach ($domain_scores as $index => $domain): ?>
                             <li>
@@ -293,5 +276,44 @@ require 'layout/base.php';
         <?php endif; ?>
     <?php endif; ?>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var canvas = document.getElementById('panssScoreChart');
+    if (!canvas) {
+        return;
+    }
+
+    new Chart(canvas, {
+        type: 'pie',
+        data: {
+            labels: <?php echo json_encode(array_column($domain_scores, 'title'), JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_HEX_TAG); ?>,
+            datasets: [{
+                data: <?php echo json_encode(array_column($domain_scores, 'score')); ?>,
+                maximums: <?php echo json_encode(array_column($domain_scores, 'max')); ?>,
+                backgroundColor: <?php echo json_encode($chart_colors); ?>,
+                borderColor: '#ffffff',
+                borderWidth: 2,
+                hoverOffset: 10
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom', labels: { usePointStyle: true, padding: 16, color: '#475569', font: { size: 12 } } },
+                tooltip: {
+                    callbacks: {
+                        label: function (context) {
+                            return 'Score: ' + context.raw + ' / ' + context.dataset.maximums[context.dataIndex];
+                        }
+                    }
+                }
+            }
+        }
+    });
+});
+</script>
 
 <?php require 'layout/footer.php'; ?>
