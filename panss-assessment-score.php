@@ -131,7 +131,7 @@ require 'layout/base.php';
     .report-meta { display: flex; flex-wrap: wrap; gap: 18px 28px; margin-top: 24px; }
     .report-meta span { color: #cffafe; font-size: 13px; }
     .report-meta strong { display: block; margin-top: 4px; color: #fff; font-size: 14px; }
-    .report-grid { display: grid; grid-template-columns: minmax(270px, .8fr) minmax(0, 1.4fr); gap: 18px; margin-top: 18px; }
+    .report-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 18px; }
     .report-card { min-width: 0; padding: 22px; border: 1px solid #e7ebf2; border-radius: 16px; background: #fff; box-shadow: 0 5px 18px rgba(15,23,42,.035); }
     .report-card h2 { margin: 0; color: #172033; font-size: 17px; font-weight: 800; }
     .card-caption { margin: 6px 0 18px; color: #758197; font-size: 12px; }
@@ -230,27 +230,26 @@ require 'layout/base.php';
                     </strong>
                 </div>
             </section>
-            <section class="report-card" aria-labelledby="panssDomainsTitle">
-                <h2 id="panssDomainsTitle">Scale comparison</h2>
-                <p class="card-caption">Each scale shown against its own maximum possible score.</p>
-                <div class="domain-progress-list">
-                    <?php foreach ($domain_scores as $index => $domain): ?>
-                        <div>
-                            <div class="domain-progress-top">
-                                <span><?php echo panss_score_escape($domain['title']); ?></span>
-                                <strong><?php echo $domain['score']; ?> / <?php echo $domain['max']; ?></strong>
-                            </div>
-                            <div class="domain-track" role="img" aria-label="<?php echo panss_score_escape($domain['title']); ?> score <?php echo $domain['score']; ?> out of <?php echo $domain['max']; ?>">
-                                <div class="domain-fill" style="width:<?php echo min(100, ($domain['score'] / $domain['max']) * 100); ?>%;background:<?php echo $chart_colors[$index]; ?>"></div>
-                            </div>
+            <section class="report-card" aria-labelledby="panssGeneralItemsTitle">
+                <h2 id="panssGeneralItemsTitle">General Psychopathology Scale <span class="text-muted fw-normal">(16 items)</span></h2>
+                <p class="card-caption">Each item is rated from 1 (absent) to 7 (extreme).</p>
+                <div class="item-list">
+                    <?php foreach ($all_scores['G'] as $item): ?>
+                        <div class="item-row">
+                            <span class="item-name"><strong><?php echo panss_score_escape($item['code']); ?></strong> · <?php echo panss_score_escape($item['label']); ?></span>
+                            <span class="item-track" aria-hidden="true"><span class="item-fill" style="display:block;width:<?php echo ($item['rating'] / 7) * 100; ?>%"></span></span>
+                            <span class="item-value">
+                                <strong><?php echo $item['rating']; ?>/7</strong>
+                                <small class="item-rating-name"><?php echo panss_score_escape($item['rating_label']); ?></small>
+                            </span>
                         </div>
                     <?php endforeach; ?>
                 </div>
-                <p class="card-caption mt-4 mb-0">Each PANSS item is rated from 1 (absent) to 7 (extreme).</p>
             </section>
         </div>
         <section class="item-groups" aria-label="Individual PANSS item scores">
             <?php foreach ($panss_sections as $prefix => $section): ?>
+                <?php if ($prefix === 'G') { continue; } ?>
                 <div class="item-group">
                     <h3><?php echo panss_score_escape($section['title']); ?> <span class="text-muted fw-normal">(<?php echo count($panss_items[$prefix]); ?> items)</span></h3>
                     <div class="item-list">
