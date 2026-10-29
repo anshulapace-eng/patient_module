@@ -17,6 +17,10 @@
             'bprs-assessments.php',
             'bprs-assessment-records.php'
         ], true);
+        $is_panss_active = in_array($current_page, [
+            'panss-assessments.php',
+            'panss-assessment-records.php'
+        ], true);
         $is_assessment_active = in_array($current_page, [
             'public-assessment-form.php',
             'assessment-report.php'
@@ -51,6 +55,27 @@
         </div>
 
         <?php if ($user_role == 1): ?>
+            <a class="nav-link <?= $is_panss_active ? 'active' : ''; ?>" data-bs-toggle="collapse" href="#panssCollapse" role="button" aria-expanded="<?= $is_panss_active ? 'true' : 'false'; ?>" aria-controls="panssCollapse">
+                <span class="nav-icon"><i class="bi bi-clipboard2-pulse" aria-hidden="true"></i></span>
+                <span class="nav-text">PANSS Assessment</span>
+                <span class="ms-auto collapse-indicator"><i class="bi bi-chevron-down" aria-hidden="true"></i></span>
+            </a>
+            <div class="collapse <?= $is_panss_active ? 'show' : ''; ?>" id="panssCollapse">
+                <ul class="nav flex-column ms-3">
+                    <li class="nav-item">
+                        <a class="nav-link <?= $current_page == 'panss-assessments.php' ? 'active' : ''; ?>" href="panss-assessments.php" <?= $current_page == 'panss-assessments.php' ? 'aria-current="page"' : ''; ?>>
+                            <span class="nav-icon"><i class="bi bi-ui-checks" aria-hidden="true"></i></span>
+                            <span class="nav-text">Assessment Form</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link <?= $current_page == 'panss-assessment-records.php' ? 'active' : ''; ?>" href="panss-assessment-records.php" <?= $current_page == 'panss-assessment-records.php' ? 'aria-current="page"' : ''; ?>>
+                            <span class="nav-icon"><i class="bi bi-table" aria-hidden="true"></i></span>
+                            <span class="nav-text">Assessment Records</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
             <a class="nav-link <?= $is_bprs_active ? 'active' : ''; ?>" data-bs-toggle="collapse" href="#bprsCollapse" role="button" aria-expanded="<?= $is_bprs_active ? 'true' : 'false'; ?>" aria-controls="bprsCollapse">
                 <span class="nav-icon"><i class="bi bi-clipboard2-pulse" aria-hidden="true"></i></span>
                 <span class="nav-text">BPRS Assessment</span>

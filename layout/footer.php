@@ -40,7 +40,7 @@ $(document).ready(function() {
                 "next": "<i class='fa-solid fa-chevron-right'></i>"
             }
         },
-        "order": [[0, "asc"]],
+        "order": [[0, "desc"]],
         "columnDefs": [
            
             { "orderable": false, "targets": "no-sort" } 
