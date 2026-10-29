@@ -1,0 +1,23 @@
+# Local configuration and secrets
+/config.php
+/.env
+/.env.*
+!/.env.example
+
+# Composer dependencies
+/vendor/
+
+# Runtime and temporary files
+*.log
+/cache/
+/tmp/
+/temp/
+*.tmp
+*.bak
+
+# Local editor and operating system files
+/.idea/
+/.vscode/
+/.DS_Store
+/Thumbs.db
+/Desktop.ini

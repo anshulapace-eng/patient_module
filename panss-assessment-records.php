@@ -5,7 +5,6 @@ if (session_status() === PHP_SESSION_NONE) {
 ob_start();
 
 require 'config.php';
-require 'panss-assessment-items.php';
 require 'panss-assessment-schema.php';
 
 if (!isset($_SESSION['user_login']) || (int) ($_SESSION['role'] ?? 0) !== 1) {
@@ -118,7 +117,7 @@ require 'layout/base.php';
     .panss-records-table td { color: #334155; }
     .panss-records-client { color: #0f172a; font-weight: 700; }
     .panss-score { display: inline-flex; justify-content: center; min-width: 48px; padding: 4px 7px; border-radius: 6px; background: #eef2ff; color: #4338ca; font-weight: 800; white-space: nowrap; }
-    .panss-view-button { padding: 6px 10px; border: 1px solid #c7d2fe; border-radius: 7px; background: #fff; color: #4338ca; font-size: 12px; font-weight: 700; }
+    .panss-view-button { display: inline-flex; align-items: center; padding: 6px 10px; border: 1px solid #c7d2fe; border-radius: 7px; background: #fff; color: #4338ca; font-size: 12px; font-weight: 700; }
     .panss-view-button:hover { background: #eef2ff; }
     .panss-delete-button { padding: 6px 10px; border: 1px solid #fecaca; border-radius: 7px; background: #fff; color: #dc3545; font-size: 12px; font-weight: 700; }
     .panss-delete-button:hover { background: #fef2f2; }
@@ -135,6 +134,13 @@ require 'layout/base.php';
     @media (prefers-reduced-motion: reduce) { .panss-toast { transition: none; } .panss-toast-progress { animation: none; } }
     .panss-records-empty, .panss-records-error { padding: 36px 20px; color: #64748b; font-size: 13px; text-align: center; }
     .panss-records-error { color: #991b1b; }
+    .panss-score-chart { margin-bottom: 20px; padding: 16px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; }
+    .panss-score-chart h3 { margin: 0 0 14px; color: #0f172a; font-size: 14px; font-weight: 800; }
+    .panss-score-chart-content { display: flex; flex-wrap: wrap; align-items: center; gap: 20px; }
+    .panss-score-pie { width: 150px; height: 150px; flex: 0 0 150px; border-radius: 50%; }
+    .panss-score-legend { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+    .panss-score-legend li { display: flex; align-items: center; gap: 9px; color: #334155; font-size: 13px; }
+    .panss-score-swatch { width: 12px; height: 12px; flex: 0 0 12px; border-radius: 3px; }
     @media (max-width: 700px) { .panss-records-page { padding: 20px 10px 30px; } .panss-records-header { align-items: flex-start; flex-direction: column; } .panss-records-action { width: 100%; justify-content: center; } .panss-records-table-wrap { padding: 4px 10px 14px; } }
 </style>
 
@@ -176,8 +182,8 @@ require 'layout/base.php';
                     <table class="panss-records-table custom-datatable">
                         <thead>
                             <tr>
-                                <th>Date</th><th>Patient</th><th>Positive</th><th>Negative</th>
-                                <th>General</th><th>Composite</th><th>Clinician</th><th class="no-sort">Actions</th>
+                                <th>Date</th><th>Patient</th><th>Positive scale</th><th>Negative scale</th>
+                                <th>General scale</th><th>Composite score</th><th>Clinician</th><th class="no-sort">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -185,49 +191,20 @@ require 'layout/base.php';
                                 <?php
                                 $patient_name = trim($record['patient_name']) ?: 'Unknown patient';
                                 $clinician_name = trim($record['clinician_name']) ?: 'Unknown clinician';
-                                $score_data = json_decode($record['score_data'], true);
-                                $score_data = is_array($score_data) ? $score_data : [];
-                                $detail_scores = [];
-                                foreach ($panss_items as $prefix => $items) {
-                                    foreach ($items as $code => $label) {
-                                        $score = $score_data[$code] ?? null;
-                                        $detail_scores[] = [
-                                            'code' => $code,
-                                            'label' => $label,
-                                            'rating' => is_numeric($score) ? (int) $score : null,
-                                            'rating_label' => is_numeric($score) && isset($panss_rating_labels[(int) $score])
-                                                ? $panss_rating_labels[(int) $score]
-                                                : null,
-                                        ];
-                                    }
-                                }
-                                $details_json = json_encode($detail_scores, JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_HEX_TAG);
                                 ?>
                                 <tr>
                                     <td data-order="<?php echo panss_records_escape($record['assessment_date']); ?>"><?php echo panss_records_escape(date('d M Y', strtotime($record['assessment_date']))); ?></td>
                                     <td><span class="panss-records-client"><?php echo panss_records_escape($patient_name); ?></span></td>
-                                    <td><span class="panss-score"><?php echo (int) $record['positive_score']; ?> / 49</span></td>
-                                    <td><span class="panss-score"><?php echo (int) $record['negative_score']; ?> / 49</span></td>
-                                    <td><span class="panss-score"><?php echo (int) $record['general_score']; ?> / 112</span></td>
-                                    <td><span class="panss-score"><?php echo (int) $record['composite_score'] > 0 ? '+' : ''; ?><?php echo (int) $record['composite_score']; ?></span></td>
+                                    <td><span class="panss-score">Positive: <?php echo (int) $record['positive_score']; ?> / 49</span></td>
+                                    <td><span class="panss-score">Negative: <?php echo (int) $record['negative_score']; ?> / 49</span></td>
+                                    <td><span class="panss-score">General: <?php echo (int) $record['general_score']; ?> / 112</span></td>
+                                    <td><span class="panss-score">Composite: <?php echo (int) $record['composite_score'] > 0 ? '+' : ''; ?><?php echo (int) $record['composite_score']; ?></span></td>
                                     <td><?php echo panss_records_escape($clinician_name); ?></td>
                                     <td>
                                         <div class="d-flex align-items-center gap-1">
-                                            <button
-                                                type="button"
-                                                class="panss-view-button"
-                                                data-bs-toggle="modal"
-                                                data-bs-target="#panssDetailsModal"
-                                                data-patient="<?php echo panss_records_escape($patient_name); ?>"
-                                                data-clinician="<?php echo panss_records_escape($clinician_name); ?>"
-                                                data-date="<?php echo panss_records_escape(date('d M Y', strtotime($record['assessment_date']))); ?>"
-                                                data-positive="<?php echo (int) $record['positive_score']; ?>"
-                                                data-negative="<?php echo (int) $record['negative_score']; ?>"
-                                                data-general="<?php echo (int) $record['general_score']; ?>"
-                                                data-composite="<?php echo (int) $record['composite_score']; ?>"
-                                                data-notes="<?php echo panss_records_escape($record['clinical_notes'] ?? ''); ?>"
-                                                data-scores="<?php echo panss_records_escape($details_json); ?>"
-                                            >View</button>
+                                            <a class="panss-view-button text-decoration-none" href="panss-assessment-score.php?id=<?php echo (int) $record['id']; ?>">
+                                                <i class="bi bi-graph-up me-1" aria-hidden="true"></i> View report
+                                            </a>
                                             <form action="" method="post" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this assessment record?');">
                                                 <input type="hidden" name="csrf_token" value="<?php echo panss_records_escape($_SESSION['panss_csrf_token']); ?>">
                                                 <input type="hidden" name="assessment_id" value="<?php echo (int) $record['id']; ?>">
@@ -264,6 +241,14 @@ require 'layout/base.php';
                     <span class="panss-score">General: <span id="panssModalGeneral" class="ms-1"></span> / 112</span>
                     <span class="panss-score">Composite: <span id="panssModalComposite" class="ms-1"></span></span>
                 </div>
+                <section class="panss-score-chart" aria-labelledby="panssScoreChartTitle">
+                    <h3 id="panssScoreChartTitle">Score breakdown</h3>
+                    <div class="panss-score-chart-content">
+                        <div id="panssScorePie" class="panss-score-pie" role="img"></div>
+                        <ul id="panssScoreLegend" class="panss-score-legend" aria-label="Score breakdown legend"></ul>
+                    </div>
+                    <p class="small text-muted mb-0 mt-3">Composite score is not included because it is calculated as Positive minus Negative.</p>
+                </section>
                 <div class="table-responsive">
                     <table class="table table-sm table-striped">
                         <thead><tr><th>Code</th><th>Item</th><th>Rating</th></tr></thead>
@@ -310,6 +295,45 @@ document.addEventListener('DOMContentLoaded', function () {
         document.getElementById('panssModalGeneral').textContent = button.dataset.general;
         var composite = Number(button.dataset.composite);
         document.getElementById('panssModalComposite').textContent = composite > 0 ? '+' + composite : String(composite);
+
+        var chartColors = ['#4f46e5', '#0ea5e9', '#14b8a6'];
+        var chartScores = [
+            { label: 'Positive', value: Number(button.dataset.positive) || 0 },
+            { label: 'Negative', value: Number(button.dataset.negative) || 0 },
+            { label: 'General', value: Number(button.dataset.general) || 0 }
+        ].map(function (item) {
+            item.value = Math.max(0, item.value);
+            return item;
+        });
+        var scoreSum = chartScores.reduce(function (sum, item) {
+            return sum + item.value;
+        }, 0);
+        var chartStops = [];
+        var chartPosition = 0;
+        chartScores.forEach(function (item, index) {
+            var nextPosition = scoreSum === 0 ? chartPosition : chartPosition + (item.value / scoreSum) * 100;
+            chartStops.push(chartColors[index] + ' ' + chartPosition + '% ' + nextPosition + '%');
+            chartPosition = nextPosition;
+        });
+        var scorePie = document.getElementById('panssScorePie');
+        scorePie.style.background = scoreSum === 0 ? '#e2e8f0' : 'conic-gradient(' + chartStops.join(', ') + ')';
+        scorePie.setAttribute('aria-label', 'PANSS domain scores: ' + chartScores.map(function (item) {
+            return item.label + ' ' + item.value;
+        }).join(', '));
+
+        var legend = document.getElementById('panssScoreLegend');
+        legend.replaceChildren();
+        chartScores.forEach(function (item, index) {
+            var entry = document.createElement('li');
+            var swatch = document.createElement('span');
+            var text = document.createElement('span');
+            swatch.className = 'panss-score-swatch';
+            swatch.style.backgroundColor = chartColors[index];
+            swatch.setAttribute('aria-hidden', 'true');
+            text.textContent = item.label + ': ' + item.value;
+            entry.append(swatch, text);
+            legend.appendChild(entry);
+        });
 
         var scoreBody = document.getElementById('panssModalScores');
         scoreBody.replaceChildren();

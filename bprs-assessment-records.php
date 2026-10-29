@@ -12,26 +12,6 @@ if (!isset($_SESSION['user_login']) || (int) ($_SESSION['role'] ?? 0) !== 1) {
 }
 
 $page_title = 'BPRS Assessment Records - Vimhans Academic';
-$items = [
-    'q1_somatic_concern' => 'Somatic concern',
-    'q2_anxiety' => 'Anxiety',
-    'q3_emotional_withdrawal' => 'Emotional withdrawal',
-    'q4_conceptual_disorganization' => 'Conceptual disorganization',
-    'q5_guilt_feelings' => 'Guilt feelings',
-    'q6_tension' => 'Tension',
-    'q7_mannerisms_posturing' => 'Mannerisms and posturing',
-    'q8_grandiosity' => 'Grandiosity',
-    'q9_depressive_mood' => 'Depressive mood',
-    'q10_hostility' => 'Hostility',
-    'q11_suspiciousness' => 'Suspiciousness',
-    'q12_hallucinatory_behavior' => 'Hallucinatory behavior',
-    'q13_motor_retardation' => 'Motor retardation',
-    'q14_uncooperativeness' => 'Uncooperativeness',
-    'q15_unusual_thought_content' => 'Unusual thought content',
-    'q16_blunted_affect' => 'Blunted affect',
-    'q17_excitement' => 'Excitement',
-    'q18_disorientation' => 'Disorientation',
-];
 $records = [];
 $load_error = '';
 $action_success = '';
@@ -119,7 +99,7 @@ require 'layout/base.php';
     .records-table td { color: #334155; }
     .records-client-name { color: #0f172a; font-weight: 700; }
     .records-score { display: inline-flex; min-width: 68px; justify-content: center; padding: 5px 9px; border-radius: 6px; background: #eef2ff; color: #4338ca; font-weight: 800; white-space: nowrap; }
-    .view-score-button { padding: 6px 10px; border: 1px solid #c7d2fe; border-radius: 7px; background: #fff; color: #4338ca; font-size: 12px; font-weight: 700; }
+    .view-score-button { display: inline-flex; align-items: center; padding: 6px 10px; border: 1px solid #c7d2fe; border-radius: 7px; background: #fff; color: #4338ca; font-size: 12px; font-weight: 700; }
     .view-score-button:hover { background: #eef2ff; }
     .delete-score-button { padding: 6px 10px; border: 1px solid #fecaca; border-radius: 7px; background: #fff; color: #dc3545; font-size: 12px; font-weight: 700; }
     .delete-score-button:hover { background: #fef2f2; }
@@ -128,6 +108,13 @@ require 'layout/base.php';
     .score-modal-total { display: inline-flex; padding: 6px 11px; border-radius: 7px; background: #eef2ff; color: #4338ca; font-weight: 800; }
     .score-modal-table th { color: #64748b; font-size: 10px; letter-spacing: .04em; text-transform: uppercase; }
     .score-modal-table td, .score-modal-table th { padding: 9px 12px; vertical-align: middle; }
+    .score-chart-section { margin-bottom: 20px; padding: 16px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; }
+    .score-chart-section h3 { margin: 0 0 14px; color: #0f172a; font-size: 14px; font-weight: 800; }
+    .score-chart-content { display: flex; flex-wrap: wrap; align-items: center; gap: 20px; }
+    .score-pie { width: 150px; height: 150px; flex: 0 0 150px; border-radius: 50%; }
+    .score-chart-legend { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+    .score-chart-legend li { display: flex; align-items: center; gap: 9px; color: #334155; font-size: 13px; }
+    .score-chart-swatch { width: 12px; height: 12px; flex: 0 0 12px; border-radius: 3px; }
     @media (max-width: 600px) { .bprs-records-page { padding: 20px 12px 30px; } .records-header { align-items: flex-start; flex-direction: column; } .records-action { width: 100%; justify-content: center; } .records-table-wrap { padding: 4px 12px 14px; } }
 </style>
 
@@ -167,47 +154,24 @@ require 'layout/base.php';
                 <div class="table-responsive records-table-wrap">
                     <table class="records-table custom-datatable">
                         <thead>
-                            <tr><th>Date</th><th>Client</th><th>Total score</th><th>Doctor name</th><th class="no-sort">Action</th></tr>
+                            <tr><th>Date</th><th>Client</th><th>BPRS total score</th><th>Doctor name</th><th class="no-sort">Action</th></tr>
                         </thead>
                         <tbody>
                             <?php foreach ($records as $record): ?>
                                 <?php
-                                $record_scores = json_decode($record['score_data'], true);
-                                if (!is_array($record_scores)) {
-                                    $record_scores = [];
-                                }
-                                $modal_scores = [];
-                                foreach ($items as $field => $title) {
-                                    $modal_scores[] = [
-                                        'title' => $title,
-                                        'score' => isset($record_scores[$field]) && is_numeric($record_scores[$field])
-                                            ? (int) $record_scores[$field]
-                                            : 0,
-                                    ];
-                                }
                                 $client_name = trim($record['patient_name']) ?: 'Unknown client';
                                 $clinician = trim($record['clinician_name']) ?: 'Unknown doctor';
                                 ?>
                                 <tr>
                                     <td data-order="<?php echo bprs_records_escape($record['assessment_date']); ?>"><?php echo bprs_records_escape(date('d M Y', strtotime($record['assessment_date']))); ?></td>
                                     <td><span class="records-client-name"><?php echo bprs_records_escape($client_name); ?></span></td>
-                                    <td><span class="records-score"><?php echo (int) $record['total_score']; ?> / 126</span></td>
+                                    <td><span class="records-score">BPRS: <?php echo (int) $record['total_score']; ?> / 126</span></td>
                                     <td><?php echo bprs_records_escape($clinician); ?></td>
                                     <td>
                                         <div class="d-flex align-items-center gap-1">
-                                            <button
-                                                type="button"
-                                                class="view-score-button"
-                                                data-bs-toggle="modal"
-                                                data-bs-target="#bprsScoreModal"
-                                                data-client="<?php echo bprs_records_escape($client_name); ?>"
-                                                data-date="<?php echo bprs_records_escape(date('d M Y', strtotime($record['assessment_date']))); ?>"
-                                                data-clinician="<?php echo bprs_records_escape($clinician); ?>"
-                                                data-total="<?php echo (int) $record['total_score']; ?>"
-                                                data-notes="<?php echo bprs_records_escape($record['clinical_notes'] ?? ''); ?>"
-                                                data-scores="<?php echo bprs_records_escape(json_encode($modal_scores, JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_HEX_TAG)); ?>">
-                                                <i class="bi bi-eye me-1" aria-hidden="true"></i> View
-                                            </button>
+                                            <a class="view-score-button text-decoration-none" href="bprs-assessment-score.php?id=<?php echo (int) $record['id']; ?>">
+                                                <i class="bi bi-graph-up me-1" aria-hidden="true"></i> View report
+                                            </a>
                                             <form action="" method="post" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this assessment record?');">
                                                 <input type="hidden" name="csrf_token" value="<?php echo bprs_records_escape($_SESSION['bprs_csrf_token']); ?>">
                                                 <input type="hidden" name="assessment_id" value="<?php echo (int) $record['id']; ?>">
@@ -246,6 +210,13 @@ require 'layout/base.php';
                     </div>
                     <span class="score-modal-total">Total: <span id="bprsModalTotal" class="ms-1"></span> / 126</span>
                 </div>
+                <section class="score-chart-section" aria-labelledby="bprsScoreChartTitle">
+                    <h3 id="bprsScoreChartTitle">Score breakdown</h3>
+                    <div class="score-chart-content">
+                        <div id="bprsScorePie" class="score-pie" role="img"></div>
+                        <ul id="bprsScoreLegend" class="score-chart-legend" aria-label="Score breakdown legend"></ul>
+                    </div>
+                </section>
                 <div class="table-responsive">
                     <table class="table table-sm table-striped score-modal-table">
                         <thead><tr><th>#</th><th>Assessment item</th><th class="text-end">Score</th></tr></thead>
@@ -281,6 +252,32 @@ document.addEventListener('DOMContentLoaded', function () {
         document.getElementById('bprsModalDate').textContent = button.dataset.date;
         document.getElementById('bprsModalClinician').textContent = 'Doctor: ' + button.dataset.clinician;
         document.getElementById('bprsModalTotal').textContent = button.dataset.total;
+
+        var totalScore = Number(button.dataset.total);
+        var maxScore = 126;
+        var scored = Number.isFinite(totalScore) ? Math.min(maxScore, Math.max(0, totalScore)) : 0;
+        var remaining = maxScore - scored;
+        var scoredPercent = (scored / maxScore) * 100;
+        var scorePie = document.getElementById('bprsScorePie');
+        scorePie.style.background = 'conic-gradient(#4f46e5 0 ' + scoredPercent + '%, #cbd5e1 ' + scoredPercent + '% 100%)';
+        scorePie.setAttribute('aria-label', 'BPRS score: ' + scored + ' points; remaining: ' + remaining + ' points, out of 126');
+
+        var legend = document.getElementById('bprsScoreLegend');
+        legend.replaceChildren();
+        [
+            { label: 'Score', value: scored, color: '#4f46e5' },
+            { label: 'Remaining', value: remaining, color: '#cbd5e1' }
+        ].forEach(function (item) {
+            var entry = document.createElement('li');
+            var swatch = document.createElement('span');
+            var text = document.createElement('span');
+            swatch.className = 'score-chart-swatch';
+            swatch.style.backgroundColor = item.color;
+            swatch.setAttribute('aria-hidden', 'true');
+            text.textContent = item.label + ': ' + item.value;
+            entry.append(swatch, text);
+            legend.appendChild(entry);
+        });
 
         var scoreBody = document.getElementById('bprsModalScores');
         scoreBody.replaceChildren();
