@@ -235,7 +235,10 @@ $total_completed = count($completed_assessments);
                 <h2>Clinical Assessments</h2>
                 <p>Manage, evaluate and track patient progress smoothly.</p>
             </div>
-            <a href="#" class="btn-back" onclick="history.back();"><i class="bi bi-arrow-left"></i> Back</a>
+            <?php  if (check_super_admin_scope()) {  ?>
+                <a href="dashboard.php" class="btn-back"><i class="bi bi-speedometer2" aria-hidden="true"></i> Back to Dashboard</a>
+                <a href="#" class="btn-back" onclick="history.back();"><i class="bi bi-arrow-left"></i> Back</a>
+           <?php } ?>
         </div>
 
         <!-- UNIFIED APP PANEL -->
@@ -330,7 +333,7 @@ $total_completed = count($completed_assessments);
                                         <i class="bi bi-check2-all"></i> Submitted
                                     </span>
                                     <!-- Clean Outline Report Button -->
-                                     <?php  if(($_SESSION['role'] ?? 0) == 1){ ?>
+                                     <?php  if (check_super_admin_scope()) {  ?>
                                     <a href="assessment-report.php?assessment_id=<?php echo $asm_id; ?>&patient_id=<?php echo $patient_id; ?>" class="btn-modern btn-report">
                                         <i class="bi bi-bar-chart-fill"></i> Report
                                     </a>

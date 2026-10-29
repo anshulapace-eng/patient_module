@@ -1,13 +1,10 @@
 <?php
 session_start();
-// Output buffering start karein
-ob_start();
 
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
-include 'config.php'; // Database connection ($conn)
-
+include 'config.php';
 // 1. URL se public parameters pakdein
 $assessment_id = isset($_GET['assessment_id']) ? intval($_GET['assessment_id']) : 0;
 $patient_id_get = isset($_GET['patient_id']) ? intval($_GET['patient_id']) : 0;
@@ -174,7 +171,7 @@ if (isset($conn)) {
 $page_title = $assessment_title . " - Vimhans Academic";
 
 // Note: Agar layout files public pages par access nahi hoti toh inko hata sakte hain.
-require('layout/base.php');
+
 
 // ================= FETCH QUESTIONS & OPTIONS FROM DATABASE =================
 $questions_data = [];
@@ -566,8 +563,39 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         color: white; font-size: 14px; font-weight: 700; width: 32px; height: 32px;
         display: flex; align-items: center; justify-content: center; border-radius: 8px; flex-shrink: 0;
     }
+    .section-title { min-width: 0; flex: 1 1 auto; }
     .section-title h3 { margin: 0; font-size: 16px; font-weight: 700; color: var(--bai-text); }
     .section-title p { margin: 2px 0 0 0; font-size: 12px; color: var(--bai-muted); }
+    .btn-back {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        flex: 0 0 auto;
+        margin-left: auto;
+        padding: 8px 13px;
+        border: 1px solid var(--bai-border);
+        border-radius: 8px;
+        background: #ffffff;
+        color: var(--bai-text);
+        font: inherit;
+        font-size: 12px;
+        font-weight: 600;
+        line-height: 1;
+        text-decoration: none;
+        white-space: nowrap;
+        cursor: pointer;
+        transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .btn-back:hover,
+    .btn-back:focus-visible {
+        border-color: #99d5cf;
+        background: var(--bai-primary-light);
+        color: var(--bai-primary-hover);
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.1);
+    }
+    .btn-back i { font-size: 13px; }
 
     .user-info-box { background: #f8fafc; border: 1px solid var(--bai-border); border-radius: var(--bai-radius-md); padding: 16px; margin-bottom: 16px; }
     .info-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: start; }
@@ -636,6 +664,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     @media (max-width: 480px) {
         .bai-container { padding: 16px; margin: 16px 10px; }
         .bai-options { grid-template-columns: 1fr; }
+        .section-header-wrap { gap: 8px; }
+        .btn-back { padding: 7px 9px; font-size: 11px; }
     }
 </style>
 
@@ -660,6 +690,16 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     <h3>Patient Details</h3>
                     <p>Primary information for the assessment record.</p>
                 </div>
+                <?php if (check_super_admin_scope()): ?>
+                    <a href="dashboard.php" class="btn-back">
+                        <i class="bi bi-speedometer2" aria-hidden="true"></i>
+                        <span>Back to Dashboard</span>
+                    </a>
+                    <button type="button" class="btn-back" onclick="history.back()">
+                        <i class="bi bi-arrow-left" aria-hidden="true"></i>
+                        <span>Back</span>
+                    </button>
+                <?php endif; ?>
             </div>
 
             <div class="user-info-box">
@@ -793,11 +833,3 @@ document.addEventListener("DOMContentLoaded", function() {
     }
 });
 </script>
-
-<?php 
-// Public form hai toh footer shayad zaroorat na ho
-if (file_exists('layout/footer.php')) {
-    require('layout/footer.php'); 
-}
-ob_end_flush();
-?>
