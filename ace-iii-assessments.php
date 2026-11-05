@@ -7,9 +7,35 @@ ob_start();
 require 'config.php';
 require 'ace-iii-assessment-schema.php';
 
-if (!isset($_SESSION['user_login']) || (int) ($_SESSION['role'] ?? 0) !== 1) {
+$current_role = (int) ($_SESSION['role'] ?? 0);
+$is_admin = $current_role === 1;
+$is_patient = $current_role === 2;
+$show_score_inputs = $is_admin;
+$edit_record_id = isset($_GET['edit_id']) ? (int) $_GET['edit_id'] : 0;
+$existing_record = null;
+
+if (!isset($_SESSION['user_login']) || !in_array($current_role, [1, 2], true)) {
     header('Location: login.php');
     exit;
+}
+
+if ($edit_record_id > 0) {
+    $existing_stmt = $conn->prepare(
+        'SELECT * FROM ace_iii_assessments WHERE id = ? LIMIT 1'
+    );
+    if ($existing_stmt) {
+        $existing_stmt->bind_param('i', $edit_record_id);
+        $existing_stmt->execute();
+        $existing_result = $existing_stmt->get_result();
+        if ($existing_result && $existing_result->num_rows > 0) {
+            $existing_record = $existing_result->fetch_assoc();
+            if (!$is_admin && (int) $existing_record['patient_id'] !== (int) ($_SESSION['user_id'] ?? 0)) {
+                $existing_record = null;
+                $error_msg = 'You do not have access to edit this record.';
+            }
+        }
+        $existing_stmt->close();
+    }
 }
 
 $page_title = "ACE-III Assessment - Indian English";
@@ -94,11 +120,28 @@ $submitted_scores = (isset($_POST['scores']) && is_array($_POST['scores'])) ? $_
 $raw_patient_id = isset($_POST['patient_id']) ? $_POST['patient_id'] : '';
 $patient_id = filter_var($raw_patient_id, FILTER_VALIDATE_INT);
 $patient_id = ($patient_id === false) ? 0 : (int) $patient_id;
+if ($patient_id < 1 && $is_patient) {
+    $patient_id = (int) ($_SESSION['user_id'] ?? 0);
+}
 $date_input = isset($_POST['assessment_date']) ? $_POST['assessment_date'] : date('Y-m-d');
 $form_date = is_string($date_input) ? $date_input : date('Y-m-d');
 $details = (isset($_POST['patient_details']) && is_array($_POST['patient_details'])) ? $_POST['patient_details'] : [];
 $answers = (isset($_POST['answers']) && is_array($_POST['answers'])) ? $_POST['answers'] : [];
 $notes = (isset($_POST['clinical_notes']) && is_string($_POST['clinical_notes'])) ? trim($_POST['clinical_notes']) : '';
+
+if ($existing_record && empty($_POST)) {
+    $patient_id = (int) $existing_record['patient_id'];
+    $form_date = $existing_record['assessment_date'] ?: $form_date;
+    $details = json_decode((string) $existing_record['patient_details'], true);
+    if (!is_array($details)) {
+        $details = [];
+    }
+    $response_payload = json_decode((string) $existing_record['response_data'], true);
+    $answers = is_array($response_payload['answers'] ?? null) ? $response_payload['answers'] : [];
+    $submitted_scores = is_array($response_payload['scores'] ?? null) ? $response_payload['scores'] : [];
+    $notes = (string) $existing_record['clinical_notes'];
+    $show_score_inputs = $is_admin || $is_patient;
+}
 
 if (!isset($_SESSION['ace_iii_csrf_token'])) {
     $_SESSION['ace_iii_csrf_token'] = bin2hex(random_bytes(32));
@@ -107,19 +150,37 @@ if (!isset($_SESSION['ace_iii_csrf_token'])) {
 if (!$ace_iii_schema_ready) {
     $error_msg = 'The assessment table could not be initialized. Please contact the system administrator.';
 } else {
-    $patients_result = $conn->query(
-        'SELECT id, first_name, last_name, email
-         FROM users
-         WHERE role_id = 2 AND patient_id = ' . PATIENT_SCOPE_ID . '
-         ORDER BY first_name, last_name'
-    );
-    if ($patients_result) {
-        while ($patient = $patients_result->fetch_assoc()) {
-            $patients[] = $patient;
+    if ($is_patient) {
+        $patient_stmt = $conn->prepare(
+            'SELECT id, first_name, last_name, email
+             FROM users
+             WHERE id = ? AND role_id = 2 AND patient_id = ' . PATIENT_SCOPE_ID . ' LIMIT 1'
+        );
+        if ($patient_stmt) {
+            $current_patient_id = (int) ($_SESSION['user_id'] ?? 0);
+            $patient_stmt->bind_param('i', $current_patient_id);
+            $patient_stmt->execute();
+            $patient_result = $patient_stmt->get_result();
+            while ($patient = $patient_result->fetch_assoc()) {
+                $patients[] = $patient;
+            }
+            $patient_stmt->close();
         }
     } else {
-        error_log('ACE-III patient list query failed: ' . $conn->error);
-        $error_msg = 'The patient list could not be loaded. Please contact the system administrator.';
+        $patients_result = $conn->query(
+            'SELECT id, first_name, last_name, email
+             FROM users
+             WHERE role_id = 2 AND patient_id = ' . PATIENT_SCOPE_ID . '
+             ORDER BY first_name, last_name'
+        );
+        if ($patients_result) {
+            while ($patient = $patients_result->fetch_assoc()) {
+                $patients[] = $patient;
+            }
+        } else {
+            error_log('ACE-III patient list query failed: ' . $conn->error);
+            $error_msg = 'The patient list could not be loaded. Please contact the system administrator.';
+        }
     }
 }
 
@@ -141,6 +202,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_ace_iii']) && 
             }
         }
     }
+
     if ($error_msg === '' && strlen($notes) > 5000) {
         $error_msg = 'Clinical notes must be 5,000 characters or fewer.';
     }
@@ -149,21 +211,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_ace_iii']) && 
     $section_totals = [];
     foreach ($score_fields as $section => $fields) {
         $section_totals[$section] = 0;
-        foreach ($fields as $field => $maximum) {
-            $raw_score = isset($submitted_scores[$field]) ? $submitted_scores[$field] : null;
-            $score = (is_string($raw_score) || is_int($raw_score))
-                ? filter_var($raw_score, FILTER_VALIDATE_INT)
-                : false;
-            if ($score === false || $score < 0 || $score > $maximum) {
-                $error_msg = 'Enter a valid score for every item (within its displayed range).';
-                continue;
-            }
-            $scores[$field] = $score;
-            $section_totals[$section] += $score;
-        }
     }
-    if (count($scores) !== array_sum(array_map('count', $score_fields)) && $error_msg === '') {
-        $error_msg = 'Please complete every score field before saving.';
+
+    if ($show_score_inputs) {
+        foreach ($score_fields as $section => $fields) {
+            foreach ($fields as $field => $maximum) {
+                $raw_score = isset($submitted_scores[$field]) ? $submitted_scores[$field] : null;
+                $score = (is_string($raw_score) || is_int($raw_score))
+                    ? filter_var($raw_score, FILTER_VALIDATE_INT)
+                    : false;
+                if ($score === false || $score < 0 || $score > $maximum) {
+                    $error_msg = 'Enter a valid score for every item (within its displayed range).';
+                    continue;
+                }
+                $scores[$field] = $score;
+                $section_totals[$section] += $score;
+            }
+        }
+        if (count($scores) !== array_sum(array_map('count', $score_fields)) && $error_msg === '') {
+            $error_msg = 'Please complete every score field before saving.';
+        }
     }
 
     foreach ([$details, $answers] as $posted_data) {
@@ -200,6 +267,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_ace_iii']) && 
     }
 
     if ($error_msg === '') {
+        if ($is_patient && empty($scores)) {
+            $scores = [];
+        }
+
         $total_score = array_sum($section_totals);
         $patient_details_json = json_encode($details, JSON_UNESCAPED_UNICODE);
         $response_data_json = json_encode(
@@ -209,43 +280,93 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_ace_iii']) && 
         if ($patient_details_json === false || $response_data_json === false) {
             $error_msg = 'The assessment responses could not be prepared for saving.';
         } else {
-            $clinician_id = (int) ($_SESSION['user_id'] ?? 0);
-            $insert = $conn->prepare(
-                'INSERT INTO ace_iii_assessments
-                    (patient_id, clinician_id, assessment_date, total_score, attention_score,
-                     memory_score, fluency_score, language_score, visuospatial_score,
-                     patient_details, response_data, clinical_notes)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-            );
-            if (!$insert) {
-                error_log('ACE-III insert prepare failed: ' . $conn->error);
-                $error_msg = 'The assessment could not be saved. Please try again.';
-            } else {
-                $insert->bind_param(
-                    'iisiiiiiisss',
-                    $patient_id,
-                    $clinician_id,
-                    $form_date,
-                    $total_score,
-                    $section_totals['attention'],
-                    $section_totals['memory'],
-                    $section_totals['fluency'],
-                    $section_totals['language'],
-                    $section_totals['visuospatial'],
-                    $patient_details_json,
-                    $response_data_json,
-                    $notes
+            $current_user_id = (int) ($_SESSION['user_id'] ?? 0);
+            $status_value = $show_score_inputs ? 'Success' : 'Pending';
+            $clinician_id = $show_score_inputs ? $current_user_id : 0;
+
+            if ($edit_record_id > 0 && $existing_record) {
+                $update = $conn->prepare(
+                    'UPDATE ace_iii_assessments
+                     SET patient_id = ?, clinician_id = ?, assessment_date = ?, total_score = ?, attention_score = ?,
+                         memory_score = ?, fluency_score = ?, language_score = ?, visuospatial_score = ?,
+                         patient_details = ?, response_data = ?, clinical_notes = ?, status = ?
+                     WHERE id = ?'
                 );
-                if ($insert->execute()) {
-                    $insert->close();
-                    $_SESSION['ace_iii_csrf_token'] = bin2hex(random_bytes(32));
-                    $_SESSION['ace_iii_saved'] = 'ACE-III assessment saved successfully.';
-                    header('Location: ace-iii-assessment-records.php');
-                    exit;
+                if (!$update) {
+                    error_log('ACE-III update prepare failed: ' . $conn->error);
+                    $error_msg = 'The assessment could not be updated. Please try again.';
+                } else {
+                    $update_params = [
+                        $patient_id,
+                        $clinician_id,
+                        $form_date,
+                        $total_score,
+                        $section_totals['attention'],
+                        $section_totals['memory'],
+                        $section_totals['fluency'],
+                        $section_totals['language'],
+                        $section_totals['visuospatial'],
+                        $patient_details_json,
+                        $response_data_json,
+                        $notes,
+                        $status_value,
+                        $edit_record_id,
+                    ];
+                    $update_types = 'iis' . str_repeat('i', 6) . str_repeat('s', 4) . 'i';
+                    array_unshift($update_params, $update_types);
+                    call_user_func_array([$update, 'bind_param'], $update_params);
+                    if ($update->execute()) {
+                        $update->close();
+                        $_SESSION['ace_iii_csrf_token'] = bin2hex(random_bytes(32));
+                        $_SESSION['ace_iii_saved'] = 'ACE-III assessment updated successfully.';
+                        header('Location: ace-iii-assessment-records.php');
+                        exit;
+                    }
+                    error_log('ACE-III update failed: ' . $update->error);
+                    $update->close();
+                    $error_msg = 'The assessment could not be updated. Please try again.';
                 }
-                error_log('ACE-III insert failed: ' . $insert->error);
-                $insert->close();
-                $error_msg = 'The assessment could not be saved. Please try again.';
+            } else {
+                $insert = $conn->prepare(
+                    'INSERT INTO ace_iii_assessments
+                        (patient_id, clinician_id, assessment_date, total_score, attention_score,
+                         memory_score, fluency_score, language_score, visuospatial_score,
+                         patient_details, response_data, clinical_notes, status)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                );
+                if (!$insert) {
+                    error_log('ACE-III insert prepare failed: ' . $conn->error);
+                    $error_msg = 'The assessment could not be saved. Please try again.';
+                } else {
+                    $insert_params = [
+                        $patient_id,
+                        $clinician_id,
+                        $form_date,
+                        $total_score,
+                        $section_totals['attention'],
+                        $section_totals['memory'],
+                        $section_totals['fluency'],
+                        $section_totals['language'],
+                        $section_totals['visuospatial'],
+                        $patient_details_json,
+                        $response_data_json,
+                        $notes,
+                        $status_value,
+                    ];
+                    $insert_types = 'iis' . str_repeat('i', 6) . str_repeat('s', 4);
+                    array_unshift($insert_params, $insert_types);
+                    call_user_func_array([$insert, 'bind_param'], $insert_params);
+                    if ($insert->execute()) {
+                        $insert->close();
+                        $_SESSION['ace_iii_csrf_token'] = bin2hex(random_bytes(32));
+                        $_SESSION['ace_iii_saved'] = 'ACE-III assessment saved successfully.';
+                        header('Location: ace-iii-assessment-records.php');
+                        exit;
+                    }
+                    error_log('ACE-III insert failed: ' . $insert->error);
+                    $insert->close();
+                    $error_msg = 'The assessment could not be saved. Please try again.';
+                }
             }
         }
     }
@@ -459,7 +580,6 @@ function ace_iii_get_fragmented_letter_svg($index)
 
 require 'layout/base.php';
 ?>
-
 <style>
     :root {
         --ace-border: #e2e8f0;
@@ -477,6 +597,14 @@ require 'layout/base.php';
         padding: 20px 14px 40px;
         color: #1e293b;
         font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+
+    .ace-role-patient .ace-score-box,
+    .ace-role-patient .ace-inline-score,
+    .ace-role-patient .ace-live-pill,
+    .ace-role-patient .ace-score-range,
+    .ace-role-patient .ace-score-label {
+        display: none !important;
     }
 
     /* Soft Shadow Header Banner */
@@ -1048,6 +1176,10 @@ require 'layout/base.php';
         <div class="ace-toast ace-toast-success" role="status"><?php echo ace_iii_escape($success_msg); ?></div>
     <?php endif; ?>
 
+    <?php if (!$show_score_inputs): ?>
+        <div class="ace-toast ace-toast-success" role="status">Response mode enabled: enter the patient response; scoring will be entered by the examiner.</div>
+    <?php endif; ?>
+
     <form method="post" id="aceForm">
         <input type="hidden" name="csrf_token" value="<?php echo ace_iii_escape($_SESSION['ace_iii_csrf_token']); ?>">
 
@@ -1057,14 +1189,19 @@ require 'layout/base.php';
                 <div class="ace-demo-col">
                     <div class="ace-demo-row">
                         <label for="patient_id">Name (Patient): *</label>
-                        <select class="form-select form-select-sm" id="patient_id" name="patient_id" required>
-                            <option value="">-- Select Patient --</option>
-                            <?php foreach ($patients as $patient): ?>
-                                <option value="<?php echo (int) $patient['id']; ?>" <?php echo $patient_id === (int) $patient['id'] ? 'selected' : ''; ?>>
-                                    <?php echo ace_iii_escape(trim($patient['first_name'] . ' ' . $patient['last_name']) ?: $patient['email']); ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
+                        <?php if ($is_patient): ?>
+                            <input type="hidden" name="patient_id" value="<?php echo (int) $patient_id; ?>">
+                            <input class="form-control form-control-sm" type="text" value="<?php echo ace_iii_escape(trim(($patients[0]['first_name'] ?? '') . ' ' . ($patients[0]['last_name'] ?? '')) ?: ($patients[0]['email'] ?? 'Current Patient')); ?>" readonly aria-readonly="true">
+                        <?php else: ?>
+                            <select class="form-select form-select-sm" id="patient_id" name="patient_id" required>
+                                <option value="">-- Select Patient --</option>
+                                <?php foreach ($patients as $patient): ?>
+                                    <option value="<?php echo (int) $patient['id']; ?>" <?php echo $patient_id === (int) $patient['id'] ? 'selected' : ''; ?>>
+                                        <?php echo ace_iii_escape(trim($patient['first_name'] . ' ' . $patient['last_name']) ?: $patient['email']); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        <?php endif; ?>
                     </div>
                     <div class="ace-demo-row">
                         <label for="detail_date_of_birth">Date of Birth:</label>
@@ -1914,6 +2051,51 @@ require 'layout/base.php';
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
+        var isAdmin = <?php echo $is_admin ? 'true' : 'false'; ?>;
+        var isPatient = <?php echo $is_patient ? 'true' : 'false'; ?>;
+
+        if (isAdmin) {
+            document.querySelectorAll('input[name^="answers["] , textarea[name^="answers["] , input[name^="patient_details["] , textarea[name^="patient_details["]').forEach(function(field) {
+                if (field.tagName === 'INPUT' || field.tagName === 'TEXTAREA') {
+                    field.readOnly = true;
+                    field.setAttribute('aria-readonly', 'true');
+                }
+            });
+
+            document.querySelectorAll('.ace-canvas').forEach(function(canvas) {
+                canvas.style.pointerEvents = 'none';
+                canvas.setAttribute('aria-disabled', 'true');
+            });
+
+            document.querySelectorAll('.ace-clear').forEach(function(button) {
+                button.disabled = true;
+                button.setAttribute('tabindex', '-1');
+            });
+        }
+
+        if (isPatient) {
+            document.querySelectorAll('.ace-score').forEach(function(input) {
+                input.disabled = true;
+                input.value = '';
+                input.setAttribute('tabindex', '-1');
+                input.setAttribute('aria-hidden', 'true');
+                var wrapper = input.closest('.ace-inline-score');
+                if (wrapper) {
+                    wrapper.style.display = 'none';
+                }
+            });
+
+            document.querySelectorAll('.ace-canvas').forEach(function(canvas) {
+                canvas.style.pointerEvents = 'none';
+                canvas.setAttribute('aria-disabled', 'true');
+            });
+
+            document.querySelectorAll('.ace-clear').forEach(function(button) {
+                button.disabled = true;
+                button.setAttribute('tabindex', '-1');
+            });
+        }
+
         var scores = document.querySelectorAll('.ace-score');
 
         function updateTotals() {

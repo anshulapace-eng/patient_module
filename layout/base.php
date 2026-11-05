@@ -119,7 +119,7 @@ header("Pragma: no-cache");
   </style>
 </head>
 
-<body>
+<body class="<?php echo ((int)($_SESSION['role'] ?? 0) === 2 ? 'ace-role-patient' : 'ace-role-admin'); ?>">
   <div class="admin-shell">
     <div class="sidebar-backdrop" data-sidebar-close></div>
      <?php  require('sidebar.php') ?>

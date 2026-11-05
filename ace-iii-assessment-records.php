@@ -7,7 +7,8 @@ ob_start();
 require 'config.php';
 require 'ace-iii-assessment-schema.php';
 
-if (!isset($_SESSION['user_login']) || (int) ($_SESSION['role'] ?? 0) !== 1) {
+$current_role = (int) ($_SESSION['role'] ?? 0);
+if (!isset($_SESSION['user_login']) || !in_array($current_role, [1, 2], true)) {
     header('Location: login.php');
     exit;
 }
@@ -20,17 +21,20 @@ unset($_SESSION['ace_iii_saved']);
 if (!$ace_iii_schema_ready) {
     $load_error = 'Assessment records are unavailable. Please contact the system administrator.';
 } else {
-    $result = $conn->query(
-        "SELECT a.id, a.patient_id, a.assessment_date, a.total_score,
+    $query = "SELECT a.id, a.patient_id, a.assessment_date, a.total_score,
                 a.attention_score, a.memory_score, a.fluency_score, a.language_score,
-                a.visuospatial_score,
+                a.visuospatial_score, a.status,
                 TRIM(CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(NULLIF(u.last_name, '.'), ''))) AS patient_name,
                 TRIM(CONCAT(COALESCE(c.first_name, ''), ' ', COALESCE(NULLIF(c.last_name, '.'), ''))) AS clinician_name
          FROM ace_iii_assessments a
          INNER JOIN users u ON u.id = a.patient_id AND u.role_id = 2 AND u.patient_id = " . PATIENT_SCOPE_ID . "
-         LEFT JOIN users c ON c.id = a.clinician_id
-         ORDER BY a.assessment_date DESC, a.id DESC"
-    );
+         LEFT JOIN users c ON c.id = a.clinician_id";
+    if ($current_role === 2) {
+        $query .= ' WHERE a.patient_id = ' . (int) ($_SESSION['user_id'] ?? 0);
+    }
+    $query .= ' ORDER BY a.assessment_date DESC, a.id DESC';
+
+    $result = $conn->query($query);
     if ($result) {
         while ($row = $result->fetch_assoc()) {
             $records[] = $row;
@@ -58,6 +62,10 @@ require 'layout/base.php';
     .ace-records-table{width:100%;border-collapse:collapse}.ace-records-table th,.ace-records-table td{padding:11px 9px;border-bottom:1px solid #f1f5f9;text-align:left;font-size:12px;white-space:nowrap}
     .ace-records-table th{background:#f8fafc;color:#64748b;font-size:10px;text-transform:uppercase;letter-spacing:.04em}
     .ace-records-total{display:inline-block;padding:5px 9px;border-radius:7px;background:#ecfdf5;color:#047857;font-weight:800}
+    .ace-records-status{display:inline-block;padding:5px 9px;border-radius:7px;font-weight:800}
+    .ace-records-status.pending{background:#fef3c7;color:#92400e}
+    .ace-records-status.success{background:#dcfce7;color:#166534}
+    .ace-records-action{display:inline-flex;align-items:center;justify-content:center;padding:6px 10px;border-radius:7px;background:#0f766e;color:#fff;text-decoration:none;font-weight:700}
     .ace-records-empty{padding:36px 20px;color:#64748b;text-align:center;font-size:13px}
     @media(max-width:900px){.ace-records-head{align-items:flex-start;flex-direction:column}}
 </style>
@@ -68,15 +76,24 @@ require 'layout/base.php';
         <?php if ($load_error !== ''): ?><div class="ace-records-empty text-danger" role="alert"><?php echo ace_iii_records_escape($load_error); ?></div>
         <?php elseif (empty($records)): ?><div class="ace-records-empty">No ACE-III assessments have been saved yet.</div>
         <?php else: ?>
-            <div class="table-responsive"><table class="ace-records-table custom-datatable"><thead><tr><th>Date</th><th>Patient</th><th>Attention /18</th><th>Memory /26</th><th>Fluency /14</th><th>Language /26</th><th>Visuospatial /16</th><th>Total /100</th><th>Clinician</th></tr></thead><tbody>
-                <?php foreach ($records as $record): ?><tr>
-                    <td data-order="<?php echo ace_iii_records_escape($record['assessment_date']); ?>"><?php echo ace_iii_records_escape(date('d M Y', strtotime($record['assessment_date']))); ?></td>
-                    <td><?php echo ace_iii_records_escape(trim($record['patient_name']) ?: 'Unknown patient'); ?></td>
-                    <td><?php echo (int) $record['attention_score']; ?></td><td><?php echo (int) $record['memory_score']; ?></td>
-                    <td><?php echo (int) $record['fluency_score']; ?></td><td><?php echo (int) $record['language_score']; ?></td>
-                    <td><?php echo (int) $record['visuospatial_score']; ?></td><td><span class="ace-records-total"><?php echo (int) $record['total_score']; ?> / 100</span></td>
-                    <td><?php echo ace_iii_records_escape(trim($record['clinician_name']) ?: 'Unknown clinician'); ?></td>
-                </tr><?php endforeach; ?>
+            <div class="table-responsive"><table class="ace-records-table custom-datatable"><thead><tr><th>Date</th><th>Patient</th><th>Attention /18</th><th>Memory /26</th><th>Fluency /14</th><th>Language /26</th><th>Visuospatial /16</th><th>Total /100</th><th>Status</th><th>Clinician</th><th>Action</th></tr></thead><tbody>
+                <?php foreach ($records as $record): $record_status = strtolower((string) ($record['status'] ?? 'Pending')); $status_label = $record_status === 'success' ? 'Success' : 'Pending'; $can_edit_record = $current_role === 1 || ($current_role === 2 && (int) $record['patient_id'] === (int) ($_SESSION['user_id'] ?? 0)); ?>
+                    <tr>
+                        <td data-order="<?php echo ace_iii_records_escape($record['assessment_date']); ?>"><?php echo ace_iii_records_escape(date('d M Y', strtotime($record['assessment_date']))); ?></td>
+                        <td><?php echo ace_iii_records_escape(trim($record['patient_name']) ?: 'Unknown patient'); ?></td>
+                        <td><?php echo (int) $record['attention_score']; ?></td><td><?php echo (int) $record['memory_score']; ?></td>
+                        <td><?php echo (int) $record['fluency_score']; ?></td><td><?php echo (int) $record['language_score']; ?></td>
+                        <td><?php echo (int) $record['visuospatial_score']; ?></td><td><span class="ace-records-total"><?php echo (int) $record['total_score']; ?> / 100</span></td>
+                        <td><span class="ace-records-status <?php echo $record_status === 'success' ? 'success' : 'pending'; ?>"><?php echo ace_iii_records_escape($status_label); ?></span></td>
+                        <td><?php echo ace_iii_records_escape(trim($record['clinician_name']) ?: 'Waiting for scorer'); ?></td>
+                        <td>
+                            <div class="d-flex gap-2 flex-wrap">
+                                <a class="ace-records-action" href="ace-iii-assessment-score.php?id=<?php echo (int) $record['id']; ?>">Report</a>
+                                <?php if ($can_edit_record): ?><a class="ace-records-action" href="ace-iii-assessments.php?edit_id=<?php echo (int) $record['id']; ?>">Edit</a><?php else: ?><span class="text-muted">-</span><?php endif; ?>
+                            </div>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
             </tbody></table></div>
         <?php endif; ?>
     </section>
