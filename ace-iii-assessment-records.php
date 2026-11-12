@@ -76,7 +76,7 @@ require 'layout/base.php';
         <?php if ($load_error !== ''): ?><div class="ace-records-empty text-danger" role="alert"><?php echo ace_iii_records_escape($load_error); ?></div>
         <?php elseif (empty($records)): ?><div class="ace-records-empty">No ACE-III assessments have been saved yet.</div>
         <?php else: ?>
-            <div class="table-responsive"><table class="ace-records-table custom-datatable"><thead><tr><th>Date</th><th>Patient</th><th>Attention /18</th><th>Memory /26</th><th>Fluency /14</th><th>Language /26</th><th>Visuospatial /16</th><th>Total /100</th><th>Status</th><th>Clinician</th><th>Action</th></tr></thead><tbody>
+            <div class="table-responsive" style="padding: 4px 20px 18px"><table class="ace-records-table custom-datatable"><thead><tr><th>Date</th><th>Patient</th><th>Attention /18</th><th>Memory /26</th><th>Fluency /14</th><th>Language /26</th><th>Visuospatial /16</th><th>Total /100</th><th>Status</th><th>Clinician</th><th>Action</th></tr></thead><tbody>
                 <?php foreach ($records as $record): $record_status = strtolower((string) ($record['status'] ?? 'Pending')); $status_label = $record_status === 'success' ? 'Success' : 'Pending'; $can_edit_record = $current_role === 1 || ($current_role === 2 && (int) $record['patient_id'] === (int) ($_SESSION['user_id'] ?? 0)); ?>
                     <tr>
                         <td data-order="<?php echo ace_iii_records_escape($record['assessment_date']); ?>"><?php echo ace_iii_records_escape(date('d M Y', strtotime($record['assessment_date']))); ?></td>

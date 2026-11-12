@@ -17,6 +17,18 @@
             'bprs-assessments.php',
             'bprs-assessment-records.php'
         ], true);
+        $is_bdi_active = in_array($current_page, [
+            'bdi-assessment-records.php',
+            'assessment-form.php',
+            'assessment-report.php'
+        ], true)
+            || ($current_page === 'assigned-assessments.php' && isset($_GET['assessment_id']) && (int) $_GET['assessment_id'] === 1);
+        $is_bai_active = in_array($current_page, [
+            'bai-assessment-records.php',
+            'assessment-form.php',
+            'assessment-report.php'
+        ], true)
+            || ($current_page === 'assigned-assessments.php' && isset($_GET['assessment_id']) && (int) $_GET['assessment_id'] === 2);
         $is_ace_iii_active = in_array($current_page, [
             'ace-iii-assessments.php',
             'ace-iii-assessment-records.php'
@@ -104,6 +116,48 @@
                     </li>
                 </ul>
             </div>
+            <a class="nav-link <?= $is_bdi_active ? 'active' : ''; ?>" data-bs-toggle="collapse" href="#bdiCollapse" role="button" aria-expanded="<?= $is_bdi_active ? 'true' : 'false'; ?>" aria-controls="bdiCollapse">
+                <span class="nav-icon"><i class="bi bi-heart-pulse" aria-hidden="true"></i></span>
+                <span class="nav-text">BDI Assessment</span>
+                <span class="ms-auto collapse-indicator"><i class="bi bi-chevron-down" aria-hidden="true"></i></span>
+            </a>
+            <div class="collapse <?= $is_bdi_active ? 'show' : ''; ?>" id="bdiCollapse">
+                <ul class="nav flex-column ms-3">
+                    <li class="nav-item">
+                        <a class="nav-link <?= $current_page == 'public-assessment-form.php' && isset($_GET['patient_id']) ? 'active' : ''; ?>" href="public-assessment-form.php" aria-current="false">
+                            <span class="nav-icon"><i class="bi bi-ui-checks" aria-hidden="true"></i></span>
+                            <span class="nav-text">Assessment Form</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link <?= $current_page == 'bdi-assessment-records.php' ? 'active' : ''; ?>" href="bdi-assessment-records.php" <?= $current_page == 'bdi-assessment-records.php' ? 'aria-current="page"' : ''; ?>>
+                            <span class="nav-icon"><i class="bi bi-table" aria-hidden="true"></i></span>
+                            <span class="nav-text">Assessment Records</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            <a class="nav-link <?= $is_bai_active ? 'active' : ''; ?>" data-bs-toggle="collapse" href="#baiCollapse" role="button" aria-expanded="<?= $is_bai_active ? 'true' : 'false'; ?>" aria-controls="baiCollapse">
+                <span class="nav-icon"><i class="bi bi-activity" aria-hidden="true"></i></span>
+                <span class="nav-text">BAI Assessment</span>
+                <span class="ms-auto collapse-indicator"><i class="bi bi-chevron-down" aria-hidden="true"></i></span>
+            </a>
+            <div class="collapse <?= $is_bai_active ? 'show' : ''; ?>" id="baiCollapse">
+                <ul class="nav flex-column ms-3">
+                    <li class="nav-item">
+                        <a class="nav-link <?= $current_page == 'public-assessment-form.php' && isset($_GET['patient_id']) ? 'active' : ''; ?>" href="public-assessment-form.php" aria-current="false">
+                            <span class="nav-icon"><i class="bi bi-ui-checks" aria-hidden="true"></i></span>
+                            <span class="nav-text">Assessment Form</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link <?= $current_page == 'bai-assessment-records.php' ? 'active' : ''; ?>" href="bai-assessment-records.php" <?= $current_page == 'bai-assessment-records.php' ? 'aria-current="page"' : ''; ?>>
+                            <span class="nav-icon"><i class="bi bi-table" aria-hidden="true"></i></span>
+                            <span class="nav-text">Assessment Records</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
             <a class="nav-link <?= $is_ace_iii_active ? 'active' : ''; ?>" data-bs-toggle="collapse" href="#aceIII-collapse" role="button" aria-expanded="<?= $is_ace_iii_active ? 'true' : 'false'; ?>" aria-controls="aceIII-collapse">
                 <span class="nav-icon"><i class="bi bi-clipboard2-pulse" aria-hidden="true"></i></span>
                 <span class="nav-text">ACE-III Assessment</span>
@@ -147,6 +201,18 @@
                         <a class="nav-link <?= $current_page == 'public-assessment-form.php' ? 'active' : ''; ?>" href="public-assessment-form.php" <?= $current_page == 'public-assessment-form.php' ? 'aria-current="page"' : ''; ?>>
                             <span class="nav-icon"><i class="bi bi-person-vcard" aria-hidden="true"></i></span>
                             <span class="nav-text">Patient Assessments</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link <?= ($current_page == 'assessment-form.php' || $current_page == 'assessment-report.php') && isset($_GET['assessment_id']) && (int) $_GET['assessment_id'] === 1 ? 'active' : ''; ?>" href="public-assessment-form.php">
+                            <span class="nav-icon"><i class="bi bi-heart-pulse" aria-hidden="true"></i></span>
+                            <span class="nav-text">BDI Assessment</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link <?= ($current_page == 'assessment-form.php' || $current_page == 'assessment-report.php') && isset($_GET['assessment_id']) && (int) $_GET['assessment_id'] === 2 ? 'active' : ''; ?>" href="public-assessment-form.php">
+                            <span class="nav-icon"><i class="bi bi-activity" aria-hidden="true"></i></span>
+                            <span class="nav-text">BAI Assessment</span>
                         </a>
                     </li>
                     <li class="nav-item">
