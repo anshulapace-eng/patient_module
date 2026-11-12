@@ -183,10 +183,10 @@
                 <span class="nav-icon"><i class="bi bi-person-plus" aria-hidden="true"></i></span>
                 <span class="nav-text">Assign Assessments</span>
             </a>
-            <a class="nav-link <?= $current_page == 'assigned-assessments.php' ? 'active' : ''; ?>" href="assigned-assessments.php" <?= $current_page == 'assigned-assessments.php' ? 'aria-current="page"' : ''; ?>>
+            <!-- <a class="nav-link <?= $current_page == 'assigned-assessments.php' ? 'active' : ''; ?>" href="assigned-assessments.php" <?= $current_page == 'assigned-assessments.php' ? 'aria-current="page"' : ''; ?>>
                 <span class="nav-icon"><i class="bi bi-table" aria-hidden="true"></i></span>
                 <span class="nav-text">Assignment Records</span>
-            </a>
+            </a> -->
         <?php endif; ?>
 
         <?php if ($user_role == 2): ?>
