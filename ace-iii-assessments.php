@@ -2054,25 +2054,6 @@ require 'layout/base.php';
         var isAdmin = <?php echo $is_admin ? 'true' : 'false'; ?>;
         var isPatient = <?php echo $is_patient ? 'true' : 'false'; ?>;
 
-        if (isAdmin) {
-            document.querySelectorAll('input[name^="answers["] , textarea[name^="answers["] , input[name^="patient_details["] , textarea[name^="patient_details["]').forEach(function(field) {
-                if (field.tagName === 'INPUT' || field.tagName === 'TEXTAREA') {
-                    field.readOnly = true;
-                    field.setAttribute('aria-readonly', 'true');
-                }
-            });
-
-            document.querySelectorAll('.ace-canvas').forEach(function(canvas) {
-                canvas.style.pointerEvents = 'none';
-                canvas.setAttribute('aria-disabled', 'true');
-            });
-
-            document.querySelectorAll('.ace-clear').forEach(function(button) {
-                button.disabled = true;
-                button.setAttribute('tabindex', '-1');
-            });
-        }
-
         if (isPatient) {
             document.querySelectorAll('.ace-score').forEach(function(input) {
                 input.disabled = true;
