@@ -18,4 +18,9 @@ $panss_schema_ready = $conn->query($panss_schema_sql);
 
 if (!$panss_schema_ready) {
     error_log('PANSS table initialization failed: ' . $conn->error);
+} else {
+    $demographic_column = $conn->query("SHOW COLUMNS FROM panss_assessments LIKE 'demographic_data'");
+    if ($demographic_column && $demographic_column->num_rows === 0) {
+        $conn->query("ALTER TABLE panss_assessments ADD COLUMN demographic_data LONGTEXT NULL AFTER clinical_notes");
+    }
 }

@@ -270,15 +270,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     }
 
     if (isset($conn)) {
-        $json_results = json_encode($results);
         $sql = "INSERT INTO assessment_responses (patient_id, assignment_id, course_id, lesson_id, user_name, user_email, user_mobile, assessment_date, total_score, status_text, responses_data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-            
+
         $response_saved = false;
 
         if ($stmt = $conn->prepare($sql)) {
-
             $stmt->bind_param(
-                "iiiissssiss",
+                "iiiisssssiss",
                 $patient_id,
                 $assignment_id,
                 $course_id,

@@ -46,7 +46,10 @@ if (isset($conn)) {
             
             // JSON string ko wapas PHP Array mein convert kar rahe hain
             if (!empty($row['responses_data'])) {
-                $results = json_decode($row['responses_data'], true);
+                $results = json_decode((string) $row['responses_data'], true);
+                if (!is_array($results)) {
+                    $results = [];
+                }
             }
         } else {
             echo "<div style='text-align:center; padding: 50px; font-family: sans-serif;'><h2>No report found for this patient.</h2><button onclick='history.back()'>Go Back</button></div>";

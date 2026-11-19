@@ -6,6 +6,7 @@ ob_start();
 
 require 'config.php';
 require 'ace-iii-assessment-schema.php';
+require 'assessment-demographics.php';
 
 $current_role = (int) ($_SESSION['role'] ?? 0);
 $is_admin = $current_role === 1;
@@ -184,6 +185,14 @@ if (!$ace_iii_schema_ready) {
     }
 }
 
+if ($patient_id < 1 && !$existing_record && !empty($patients)) {
+    $patient_id = (int) $patients[0]['id'];
+}
+$ace_filled_by = trim((string) ($_SESSION['name'] ?? ''));
+if ($ace_filled_by === '') {
+    $ace_filled_by = 'Clinician';
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_ace_iii']) && $ace_iii_schema_ready) {
     $posted_token = isset($_POST['csrf_token']) ? $_POST['csrf_token'] : '';
     if (!is_string($posted_token) || !hash_equals($_SESSION['ace_iii_csrf_token'], $posted_token)) {
@@ -271,6 +280,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_ace_iii']) && 
             $scores = [];
         }
 
+        $demographics = assessment_demographics_normalize($_POST['demographics'] ?? []);
+        $demographics['date'] = $demographics['date'] ?: $form_date;
+        $details['_demographics'] = $demographics;
+        $demographic_json = json_encode($demographics, JSON_UNESCAPED_UNICODE);
         $total_score = array_sum($section_totals);
         $patient_details_json = json_encode($details, JSON_UNESCAPED_UNICODE);
         $response_data_json = json_encode(
@@ -289,7 +302,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_ace_iii']) && 
                     'UPDATE ace_iii_assessments
                      SET patient_id = ?, clinician_id = ?, assessment_date = ?, total_score = ?, attention_score = ?,
                          memory_score = ?, fluency_score = ?, language_score = ?, visuospatial_score = ?,
-                         patient_details = ?, response_data = ?, clinical_notes = ?, status = ?
+                         patient_details = ?, response_data = ?, clinical_notes = ?, status = ?, demographic_data = ?
                      WHERE id = ?'
                 );
                 if (!$update) {
@@ -310,9 +323,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_ace_iii']) && 
                         $response_data_json,
                         $notes,
                         $status_value,
+                        $demographic_json,
                         $edit_record_id,
                     ];
-                    $update_types = 'iis' . str_repeat('i', 6) . str_repeat('s', 4) . 'i';
+                    $update_types = 'iis' . str_repeat('i', 6) . str_repeat('s', 5) . 'i';
                     array_unshift($update_params, $update_types);
                     call_user_func_array([$update, 'bind_param'], $update_params);
                     if ($update->execute()) {
@@ -331,8 +345,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_ace_iii']) && 
                     'INSERT INTO ace_iii_assessments
                         (patient_id, clinician_id, assessment_date, total_score, attention_score,
                          memory_score, fluency_score, language_score, visuospatial_score,
-                         patient_details, response_data, clinical_notes, status)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                         patient_details, response_data, clinical_notes, status, demographic_data)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
                 );
                 if (!$insert) {
                     error_log('ACE-III insert prepare failed: ' . $conn->error);
@@ -352,8 +366,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_ace_iii']) && 
                         $response_data_json,
                         $notes,
                         $status_value,
+                        $demographic_json,
                     ];
-                    $insert_types = 'iis' . str_repeat('i', 6) . str_repeat('s', 4);
+                    $insert_types = 'iis' . str_repeat('i', 6) . str_repeat('s', 5);
                     array_unshift($insert_params, $insert_types);
                     call_user_func_array([$insert, 'bind_param'], $insert_params);
                     if ($insert->execute()) {
@@ -467,7 +482,7 @@ function ace_iii_get_picture_svg($index)
 
         // 6. Realistic Dromedary Camel (Hump, Long Curved Neck, Tail, Jointed Legs)
         6 => '<svg viewBox="0 0 160 120" class="ace-detailed-svg">
-            <path d="M38 58 C42 30 68 28 78 48 C84 54 90 54 96 42 C100 32 102 22 108 20 L120 20 C123 22 122 26 116 27 L110 28 C106 38 104 52 98 62 C96 68 94 72 90 74 L90 102 L85 102 L84 76 L78 102 L73 102 L76 74 C64 76 54 74 48 72 L44 102 L39 102 L42 74 L34 102 L29 102 L36 68 C35 64 36 60 38 58 Z" fill="#ffffff"/>
+            <path d="M38 58 C42 30 68 28 78 48 C84 54 90 54 96 42 C100 32 102 22 108 20 L120 20 C123 22 122 26 116 27 L110 28 C106 38 104 52 98 62 C96 68 94 72 90 74 L90 102 L85 102 L84 76 L78 102 L73 102 L76 74 C64 76 54 74 48 72 L44 102 L39 102 L42 74 L35 104 L30 104 L34 68 C32 62 34 58 38 56 Z" fill="#ffffff"/>
             <path d="M38 58 L30 74 L33 76 L37 64" fill="#e2e8f0"/>
             <circle cx="113" cy="23" r="1.4" fill="#0f172a"/>
             <path d="M107 20 L105 16 L109 18" fill="none"/>
@@ -1191,7 +1206,7 @@ require 'layout/base.php';
                         <label for="patient_id">Name (Patient): *</label>
                         <?php if ($is_patient): ?>
                             <input type="hidden" name="patient_id" value="<?php echo (int) $patient_id; ?>">
-                            <input class="form-control form-control-sm" type="text" value="<?php echo ace_iii_escape(trim(($patients[0]['first_name'] ?? '') . ' ' . ($patients[0]['last_name'] ?? '')) ?: ($patients[0]['email'] ?? 'Current Patient')); ?>" readonly aria-readonly="true">
+                            <input class="form-control form-control-sm" type="text" value="<?php echo ace_iii_escape(trim(($patients[0]['first_name'] ?? '') . ' ' . ($patients[0]['last_name'] ?? '')) ?: ($patients[0]['email'] ?? 'Current Patient')); ?>" readonly>
                         <?php else: ?>
                             <select class="form-select form-select-sm" id="patient_id" name="patient_id" required>
                                 <option value="">-- Select Patient --</option>
@@ -1203,46 +1218,25 @@ require 'layout/base.php';
                             </select>
                         <?php endif; ?>
                     </div>
-                    <div class="ace-demo-row">
-                        <label for="detail_date_of_birth">Date of Birth:</label>
-                        <input class="form-control form-control-sm" id="detail_date_of_birth" name="patient_details[date_of_birth]" value="<?php echo ace_iii_escape($details['date_of_birth'] ?? ''); ?>">
-                    </div>
-                    <div class="ace-demo-row">
-                        <label for="detail_hospital_address">Hospital No. or Address:</label>
-                        <input class="form-control form-control-sm" id="detail_hospital_address" name="patient_details[hospital_address]" value="<?php echo ace_iii_escape($details['hospital_address'] ?? ''); ?>">
-                    </div>
-                    <div class="ace-demo-row">
-                        <label for="detail_languages_known">Languages Known:</label>
-                        <input class="form-control form-control-sm" id="detail_languages_known" name="patient_details[languages_known]" value="<?php echo ace_iii_escape($details['languages_known'] ?? ''); ?>">
-                    </div>
-                    <div class="ace-demo-row">
-                        <label for="detail_native_language">Native Language:</label>
-                        <input class="form-control form-control-sm" id="detail_native_language" name="patient_details[native_language]" value="<?php echo ace_iii_escape($details['native_language'] ?? ''); ?>">
-                    </div>
                 </div>
                 <div class="ace-demo-col">
                     <div class="ace-demo-row">
-                        <label for="assessment_date">Date of testing: *</label>
+                        <label for="assessment_date">Date: *</label>
                         <input class="form-control form-control-sm" type="date" id="assessment_date" name="assessment_date" value="<?php echo ace_iii_escape($form_date); ?>" required>
                     </div>
+                    <?php
+                    $ace_demographics = is_array($details['_demographics'] ?? null) ? assessment_demographics_normalize($details['_demographics']) : assessment_demographics_normalize([]);
+                    $ace_demographics['date'] = $form_date;
+                    $ace_demographics['filled_by'] = $ace_demographics['filled_by'] ?: $ace_filled_by;
+                    ?>
                     <div class="ace-demo-row">
-                        <label for="detail_tester_name">Tester's name:</label>
-                        <input class="form-control form-control-sm" id="detail_tester_name" name="patient_details[tester_name]" value="<?php echo ace_iii_escape($details['tester_name'] ?? ''); ?>">
-                    </div>
-                    <div class="ace-demo-row">
-                        <label for="detail_education_age">Age at leaving full-time education:</label>
-                        <input class="form-control form-control-sm" id="detail_education_age" name="patient_details[education_age]" value="<?php echo ace_iii_escape($details['education_age'] ?? ''); ?>">
-                    </div>
-                    <div class="ace-demo-row">
-                        <label for="detail_occupation">Occupation:</label>
-                        <input class="form-control form-control-sm" id="detail_occupation" name="patient_details[occupation]" value="<?php echo ace_iii_escape($details['occupation'] ?? ''); ?>">
-                    </div>
-                    <div class="ace-demo-row">
-                        <label for="detail_handedness">Handedness:</label>
-                        <input class="form-control form-control-sm" id="detail_handedness" name="patient_details[handedness]" value="<?php echo ace_iii_escape($details['handedness'] ?? ''); ?>">
+                        <label for="demographics_filled_by">FILLED BY:</label>
+                        <input class="form-control form-control-sm" id="demographics_filled_by" name="demographics[filled_by]" value="<?php echo ace_iii_escape($ace_demographics['filled_by']); ?>" readonly>
                     </div>
                 </div>
             </div>
+            <input type="hidden" name="demographics[date]" value="<?php echo ace_iii_escape($form_date); ?>">
+            <?php echo assessment_demographics_html('demographics', $ace_demographics, ['hide_fields' => ['date', 'client_name', 'filled_by']]); ?>
         </section>
 
         <!-- PAGE 1: ATTENTION -->
@@ -1335,9 +1329,7 @@ require 'layout/base.php';
                         <li>Register number of trials:</li>
                     </ul>
                     <input class="form-control form-control-sm" name="answers[registration_trials]" value="<?php echo ace_iii_escape($answers['registration_trials'] ?? ''); ?>" placeholder="Record subject's response &amp; number of trials">
-                </div>
-                <div class="ace-split-right">
-                    <?php echo ace_iii_score_input('registration', 3, $submitted_scores, 'Attention'); ?>
+               
                 </div>
             </div>
 
@@ -1364,6 +1356,7 @@ require 'layout/base.php';
                 </div>
             </div>
         </section>
+
 
         <!-- PAGE 1: MEMORY (3 WORDS RECALL) -->
         <section class="ace-paper-box">
@@ -1940,92 +1933,56 @@ require 'layout/base.php';
                     <div class="table-responsive">
                         <table class="ace-recog-table">
                             <tbody>
-                                <tr>
-                                    <td>Sunil Kumar Sharma</td>
-                                    <td class="ace-recog-target">Sunil kumar Singh</td>
-                                    <td>Rakesh Yadav</td>
-                                    <td class="ace-recog-shaded">recalled</td>
+                                <tr class="table-light fw-bold">
+                                    <td>TOTAL ACE-III SCORE</td>
+                                    <td class="text-end" style="width:160px;"><span id="total_all" class="fs-5 fw-bold text-success">0</span> / 100</td>
                                 </tr>
                                 <tr>
-                                    <td>25</td>
-                                    <td class="ace-recog-target">52</td>
-                                    <td>37</td>
-                                    <td class="ace-recog-shaded">recalled</td>
+                                    <td>Score Interpretation</td>
+                                    <td class="text-end"><span id="ace_iii_interpretation" class="fw-bold">82-Below - Abnormal Cognitive Function</span></td>
                                 </tr>
                                 <tr>
-                                    <td>Market Road</td>
-                                    <td>Sastri Marg</td>
-                                    <td class="ace-recog-target">Station Road</td>
-                                    <td class="ace-recog-shaded">recalled</td>
+                                    <td>Attention</td>
+                                    <td class="text-end fw-bold"><span id="total_attention">0</span> / 18</td>
                                 </tr>
                                 <tr>
-                                    <td>Prakash Nagar</td>
-                                    <td class="ace-recog-target">Gandhi Nagar</td>
-                                    <td>Patel Nagar</td>
-                                    <td class="ace-recog-shaded">recalled</td>
+                                    <td>Memory</td>
+                                    <td class="text-end fw-bold"><span id="total_memory">0</span> / 26</td>
                                 </tr>
                                 <tr>
-                                    <td class="ace-recog-target">Allahabad</td>
-                                    <td>Gwalior</td>
-                                    <td>Indore</td>
-                                    <td class="ace-recog-shaded">recalled</td>
+                                    <td>Fluency</td>
+                                    <td class="text-end fw-bold"><span id="total_fluency">0</span> / 14</td>
+                                </tr>
+                                <tr>
+                                    <td>Language</td>
+                                    <td class="text-end fw-bold"><span id="total_language">0</span> / 26</td>
+                                </tr>
+                                <tr>
+                                    <td>Visuospatial</td>
+                                    <td class="text-end fw-bold"><span id="total_visuospatial">0</span> / 16</td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
-                    <input class="form-control form-control-sm mt-2" name="answers[address_recognition_response]" value="<?php echo ace_iii_escape($answers['address_recognition_response'] ?? ''); ?>" placeholder="Record recognised items / notes">
+
+                    <div class="mb-3">
+                        <label class="fw-bold mb-1" style="font-size:13px;" for="clinical_notes">Clinical Observations / Examiner Notes (Optional):</label>
+                        <textarea class="form-control form-control-sm" id="clinical_notes" name="clinical_notes" rows="2" maxlength="5000"><?php echo ace_iii_escape($notes); ?></textarea>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <a class="btn btn-outline-secondary btn-sm" href="ace-iii-assessment-records.php">View Saved Records</a>
+                        <button type="submit" class="btn btn-success fw-bold px-4" name="submit_ace_iii" value="1" <?php echo empty($patients) || !$ace_iii_schema_ready ? 'disabled' : ''; ?>>
+                            Save ACE-III Assessment
+                        </button>
+                    </div>
                 </div>
                 <div class="ace-split-right">
-                    <?php echo ace_iii_score_input('address_recognition', 5, $submitted_scores, 'Memory'); ?>
-                </div>
-            </div>
-        </section>
-
-        <!-- PAGE 6: SCORES SUMMARY TABLE -->
-        <section class="ace-paper-box">
-            <div class="ace-domain-bar"><span>SCORES</span></div>
-            <div class="p-3">
-                <div class="table-responsive">
-                    <table class="table table-bordered align-middle mb-3" style="border-color:#334155;">
-                        <tbody>
-                            <tr class="table-light fw-bold">
-                                <td>TOTAL ACE-III SCORE</td>
-                                <td class="text-end" style="width:160px;"><span id="total_all" class="fs-5 fw-bold text-success">0</span> / 100</td>
-                            </tr>
-                            <tr>
-                                <td>Attention</td>
-                                <td class="text-end fw-bold"><span id="total_attention">0</span> / 18</td>
-                            </tr>
-                            <tr>
-                                <td>Memory</td>
-                                <td class="text-end fw-bold"><span id="total_memory">0</span> / 26</td>
-                            </tr>
-                            <tr>
-                                <td>Fluency</td>
-                                <td class="text-end fw-bold"><span id="total_fluency">0</span> / 14</td>
-                            </tr>
-                            <tr>
-                                <td>Language</td>
-                                <td class="text-end fw-bold"><span id="total_language">0</span> / 26</td>
-                            </tr>
-                            <tr>
-                                <td>Visuospatial</td>
-                                <td class="text-end fw-bold"><span id="total_visuospatial">0</span> / 16</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-
-                <div class="mb-3">
-                    <label class="fw-bold mb-1" style="font-size:13px;" for="clinical_notes">Clinical Observations / Examiner Notes (Optional):</label>
-                    <textarea class="form-control form-control-sm" id="clinical_notes" name="clinical_notes" rows="2" maxlength="5000"><?php echo ace_iii_escape($notes); ?></textarea>
-                </div>
-
-                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                    <a class="btn btn-outline-secondary btn-sm" href="ace-iii-assessment-records.php">View Saved Records</a>
-                    <button type="submit" class="btn btn-success fw-bold px-4" name="submit_ace_iii" value="1" <?php echo empty($patients) || !$ace_iii_schema_ready ? 'disabled' : ''; ?>>
-                        Save ACE-III Assessment
-                    </button>
+                    <div class="ace-score-box">
+                        <span class="ace-score-title">Memory</span>
+                        <span class="ace-score-range">[Score 0–4]</span>
+                        <div class="fw-bold mt-1 fs-5" id="retro_mem_sub">0</div>
+                    </div>
                 </div>
             </div>
         </section>
@@ -2154,6 +2111,22 @@ require 'layout/base.php';
             var grandStr = String(grand);
             document.getElementById('total_all').textContent = grandStr;
             document.getElementById('sticky_total').textContent = grandStr;
+
+            var interpretation = '82-Below - Abnormal Cognitive Function';
+            var interpretationClass = 'text-danger';
+            if (grand >= 88) {
+                interpretation = '88-100 - Normal Cognitive Function';
+                interpretationClass = 'text-success';
+            } else if (grand >= 83) {
+                interpretation = '83-87 - Borderline/ Mild Cognitive Impairment';
+                interpretationClass = 'text-warning';
+            }
+
+            var interpretationEl = document.getElementById('ace_iii_interpretation');
+            if (interpretationEl) {
+                interpretationEl.textContent = interpretation;
+                interpretationEl.className = 'fw-bold ' + interpretationClass;
+            }
         }
 
         scores.forEach(function(input) {

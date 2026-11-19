@@ -69,6 +69,10 @@ require 'layout/base.php';
     .ace-records-status{display:inline-block;padding:5px 9px;border-radius:7px;font-weight:800}
     .ace-records-status.pending{background:#fef3c7;color:#92400e}
     .ace-records-status.success{background:#dcfce7;color:#166534}
+    .ace-records-interpretation{display:inline-block;padding:5px 9px;border-radius:7px;font-weight:800;white-space:nowrap}
+    .ace-records-interpretation.normal{background:#dcfce7;color:#166534}
+    .ace-records-interpretation.borderline{background:#fef3c7;color:#92400e}
+    .ace-records-interpretation.abnormal{background:#fee2e2;color:#991b1b}
     .ace-records-actions{display:flex;align-items:center;gap:8px;white-space:nowrap;flex-wrap:nowrap}
     .ace-records-action{display:inline-flex;align-items:center;justify-content:center;padding:7px 12px;border-radius:8px;background:#0f766e;color:#fff;text-decoration:none;font-size:12px;font-weight:700;border:1px solid #0f766e;transition:all .2s ease;line-height:1.2}
     .ace-records-action:hover{background:#115e59;border-color:#115e59;color:#fff;text-decoration:none;transform:translateY(-1px)}
@@ -85,14 +89,15 @@ require 'layout/base.php';
         <?php if ($load_error !== ''): ?><div class="ace-records-empty text-danger" role="alert"><?php echo ace_iii_records_escape($load_error); ?></div>
         <?php elseif (empty($records)): ?><div class="ace-records-empty">No ACE-III assessments have been saved yet.</div>
         <?php else: ?>
-            <div class="table-responsive" style="padding: 4px 20px 18px"><table class="ace-records-table custom-datatable"><thead><tr><th>Date</th><th>Patient</th><th>Attention /18</th><th>Memory /26</th><th>Fluency /14</th><th>Language /26</th><th>Visuospatial /16</th><th>Total /100</th><th>Status</th><th>Clinician</th><th>Action</th></tr></thead><tbody>
-                <?php foreach ($records as $record): $record_status = strtolower((string) ($record['status'] ?? 'Pending')); $status_label = $record_status === 'success' ? 'Success' : 'Pending'; $can_edit_record = $current_role === 1 || ($current_role === 2 && (int) $record['patient_id'] === (int) ($_SESSION['user_id'] ?? 0)); ?>
+            <div class="table-responsive" style="padding: 4px 20px 18px"><table class="ace-records-table custom-datatable"><thead><tr><th>Date</th><th>Patient</th><th>Attention /18</th><th>Memory /26</th><th>Fluency /14</th><th>Language /26</th><th>Visuospatial /16</th><th>Total /100</th><th>Interpretation</th><th>Status</th><th>Clinician</th><th>Action</th></tr></thead><tbody>
+                <?php foreach ($records as $record): $record_status = strtolower((string) ($record['status'] ?? 'Pending')); $status_label = $record_status === 'success' ? 'Success' : 'Pending'; $can_edit_record = $current_role === 1 || ($current_role === 2 && (int) $record['patient_id'] === (int) ($_SESSION['user_id'] ?? 0)); $record_total = (int) $record['total_score']; if ($record_total >= 88) { $interpretation_label = '88-100 - Normal Cognitive Function'; $interpretation_class = 'normal'; } elseif ($record_total >= 83) { $interpretation_label = '83-87 - Borderline/ Mild Cognitive Impairment'; $interpretation_class = 'borderline'; } else { $interpretation_label = '82-Below - Abnormal Cognitive Function'; $interpretation_class = 'abnormal'; } ?>
                     <tr>
                         <td data-order="<?php echo ace_iii_records_escape($record['assessment_date']); ?>"><?php echo ace_iii_records_escape(date('d M Y', strtotime($record['assessment_date']))); ?></td>
                         <td><?php echo ace_iii_records_escape(trim($record['patient_name']) ?: 'Unknown patient'); ?></td>
                         <td><?php echo (int) $record['attention_score']; ?></td><td><?php echo (int) $record['memory_score']; ?></td>
                         <td><?php echo (int) $record['fluency_score']; ?></td><td><?php echo (int) $record['language_score']; ?></td>
                         <td><?php echo (int) $record['visuospatial_score']; ?></td><td><span class="ace-records-total"><?php echo (int) $record['total_score']; ?> / 100</span></td>
+                        <td><span class="ace-records-interpretation <?php echo $interpretation_class; ?>"><?php echo ace_iii_records_escape($interpretation_label); ?></span></td>
                         <td><span class="ace-records-status <?php echo $record_status === 'success' ? 'success' : 'pending'; ?>"><?php echo ace_iii_records_escape($status_label); ?></span></td>
                         <td><?php echo ace_iii_records_escape(trim($record['clinician_name']) ?: 'Waiting for scorer'); ?></td>
                         <td>

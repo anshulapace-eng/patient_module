@@ -7,6 +7,7 @@ ob_start();
 require 'config.php';
 require 'panss-assessment-items.php';
 require 'panss-assessment-schema.php';
+require 'assessment-demographics.php';
 
 if (!isset($_SESSION['user_login']) || (int) ($_SESSION['role'] ?? 0) !== 1) {
     header('Location: login.php');
@@ -30,6 +31,8 @@ $form_date = is_string($date_input) ? $date_input : date('Y-m-d');
 $notes_input = $_POST['clinical_notes'] ?? '';
 $form_notes = is_string($notes_input) ? $notes_input : '';
 $clinician_name = trim((string) ($_SESSION['name'] ?? ''));
+$demographics = assessment_demographics_normalize($_POST['demographics'] ?? []);
+$demographics['date'] = $demographics['date'] ?: $form_date;
 
 if (!isset($_SESSION['panss_csrf_token'])) {
     $_SESSION['panss_csrf_token'] = bin2hex(random_bytes(32));
@@ -142,18 +145,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_panss']) && $s
         $composite_score = $positive_score - $negative_score;
         $score_data = json_encode($scores);
         $clinician_id = (int) ($_SESSION['user_id'] ?? 0);
+        $demographic_json = json_encode($demographics, JSON_UNESCAPED_UNICODE);
         $insert_stmt = $conn->prepare(
             'INSERT INTO panss_assessments
                 (patient_id, clinician_id, assessment_date, positive_score, negative_score,
-                 general_score, composite_score, score_data, clinical_notes)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                 general_score, composite_score, score_data, clinical_notes, demographic_data)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         );
         if (!$insert_stmt) {
             error_log('PANSS insert prepare failed: ' . $conn->error);
             $error_msg = 'The assessment could not be saved. Please try again.';
         } else {
             $insert_stmt->bind_param(
-                'iisiiiiss',
+                'iisiiiisss',
                 $form_patient_id,
                 $clinician_id,
                 $form_date,
@@ -162,7 +166,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_panss']) && $s
                 $general_score,
                 $composite_score,
                 $score_data,
-                $form_notes
+                $form_notes,
+                $demographic_json
             );
             if ($insert_stmt->execute()) {
                 $insert_stmt->close();
@@ -350,6 +355,8 @@ require 'layout/base.php';
                         <input class="form-control bg-light" type="text" id="clinician_name" value="<?php echo panss_form_escape($clinician_name); ?>" readonly>
                     </div>
                 </div>
+
+                <?php echo assessment_demographics_html('demographics', $demographics, ['hide_fields' => ['date', 'client_name']]); ?>
             </section>
 
             <div class="panss-note">

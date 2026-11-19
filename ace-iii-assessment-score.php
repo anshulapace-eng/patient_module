@@ -98,8 +98,12 @@ if ($record) {
 }
 
 $total_score = $record ? (int) $record['total_score'] : 0;
-$status_text = $total_score >= 88 ? 'Normal cognition' : ($total_score >= 77 ? 'Mild cognitive impairment' : ($total_score >= 60 ? 'Moderate impairment' : 'Severe impairment'));
-$status_color = $total_score >= 88 ? '#10b981' : ($total_score >= 77 ? '#f59e0b' : ($total_score >= 60 ? '#f97316' : '#ef4444'));
+$status_text = $total_score >= 88
+    ? '88-100 - Normal Cognitive Function'
+    : ($total_score >= 83
+        ? '83-87 - Borderline/ Mild Cognitive Impairment'
+        : '82-Below - Abnormal Cognitive Function');
+$status_color = $total_score >= 88 ? '#10b981' : ($total_score >= 83 ? '#f59e0b' : '#ef4444');
 
 require 'layout/base.php';
 ?>

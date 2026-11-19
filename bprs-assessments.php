@@ -5,6 +5,7 @@ if (session_status() === PHP_SESSION_NONE) {
 ob_start();
 
 require 'config.php';
+require 'assessment-demographics.php';
 
 if (!isset($_SESSION['user_login']) || (int) ($_SESSION['role'] ?? 0) !== 1) {
     header('Location: login.php');
@@ -129,6 +130,8 @@ $form_date = is_string($form_date_input) ? $form_date_input : date('Y-m-d');
 $form_notes_input = $_POST['clinical_notes'] ?? '';
 $form_notes = is_string($form_notes_input) ? $form_notes_input : '';
 $clinician_name = trim((string) ($_SESSION['name'] ?? ''));
+$demographics = assessment_demographics_normalize($_POST['demographics'] ?? []);
+$demographics['date'] = $demographics['date'] ?: $form_date;
 
 if (!isset($_SESSION['bprs_csrf_token'])) {
     $_SESSION['bprs_csrf_token'] = bin2hex(random_bytes(32));
@@ -164,6 +167,11 @@ if ($schema_ready) {
     } else {
         error_log('BPRS patient list query failed: ' . $conn->error);
         $error_msg = 'The patient list could not be loaded. Please contact the system administrator.';
+    }
+
+    $demographic_column = $conn->query("SHOW COLUMNS FROM bprs_assessments LIKE 'demographic_data'");
+    if ($demographic_column && $demographic_column->num_rows === 0) {
+        $conn->query("ALTER TABLE bprs_assessments ADD COLUMN demographic_data LONGTEXT NULL AFTER clinical_notes");
     }
 }
 
@@ -241,25 +249,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_bprs']) && $sc
         }
 
         if ($error_msg === '') {
+            $demographics = assessment_demographics_normalize($_POST['demographics'] ?? []);
+            $demographics['date'] = $demographics['date'] ?: $form_date;
+            $demographics['filled_by'] = $demographics['filled_by'] ?: $clinician_name;
             $score_data = json_encode($scores);
             $clinician_id = (int) $_SESSION['user_id'];
+            $demographic_json = json_encode($demographics, JSON_UNESCAPED_UNICODE);
             $insert_stmt = $conn->prepare(
                 'INSERT INTO bprs_assessments
-                    (patient_id, clinician_id, assessment_date, total_score, score_data, clinical_notes)
-                 VALUES (?, ?, ?, ?, ?, ?)'
+                    (patient_id, clinician_id, assessment_date, total_score, score_data, clinical_notes, demographic_data)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)'
             );
             if (!$insert_stmt) {
                 error_log('BPRS insert prepare failed: ' . $conn->error);
                 $error_msg = 'The assessment could not be saved. Please try again.';
             } else {
                 $insert_stmt->bind_param(
-                    'iisiss',
+                    'iisisss',
                     $patient_id,
                     $clinician_id,
                     $assessment_date,
                     $total_score,
                     $score_data,
-                    $clinical_notes
+                    $clinical_notes,
+                    $demographic_json
                 );
                 if ($insert_stmt->execute()) {
                     $insert_stmt->close();
@@ -379,36 +392,23 @@ require 'layout/base.php';
 <div class="container-fluid py-4 px-3 px-md-4">
     <div class="bprs-page">
         <?php if ($success_msg !== ''): ?>
-            <div class="bprs-toast bprs-toast-success" id="bprsSuccessToast" role="status" aria-live="polite">
-                <span class="bprs-toast-icon" aria-hidden="true"><i class="fa-solid fa-check"></i></span>
-                <span class="bprs-toast-copy"><strong class="bprs-toast-title">Success!</strong><span class="bprs-toast-message"><?php echo bprs_escape($success_msg); ?></span></span>
-                <span class="bprs-toast-progress" aria-hidden="true"></span>
-            </div>
+            <div class="bprs-toast bprs-toast-success" role="status"><span class="bprs-toast-icon"><i class="fa-solid fa-check"></i></span><span class="bprs-toast-copy"><strong class="bprs-toast-title">Success!</strong><span class="bprs-toast-message"><?php echo bprs_escape($success_msg); ?></span></span></div>
         <?php endif; ?>
         <?php if ($error_msg !== ''): ?>
-            <div class="bprs-toast bprs-toast-error" id="bprsErrorToast" role="alert" aria-live="assertive">
-                <span class="bprs-toast-icon" aria-hidden="true"><i class="fa-solid fa-triangle-exclamation"></i></span>
-                <span class="bprs-toast-copy"><strong class="bprs-toast-title">Error!</strong><span class="bprs-toast-message"><?php echo bprs_escape($error_msg); ?></span></span>
-                <span class="bprs-toast-progress" aria-hidden="true"></span>
-            </div>
+            <div class="bprs-toast bprs-toast-error" role="alert"><span class="bprs-toast-icon"><i class="fa-solid fa-triangle-exclamation"></i></span><span class="bprs-toast-copy"><strong class="bprs-toast-title">Error!</strong><span class="bprs-toast-message"><?php echo bprs_escape($error_msg); ?></span></span></div>
         <?php endif; ?>
 
         <div class="bprs-header-card">
             <div>
-                <span class="badge mb-1 px-2.5 py-1" style="background:var(--teal-light);color:var(--teal-primary);border:1px solid #ccfbf1;font-size:10.5px;font-weight:700;">
-                    <i class="fa-solid fa-notes-medical me-1" aria-hidden="true"></i> Psychiatric Clinical Scale
-                </span>
+                <span class="badge mb-1 px-2 py-1" style="background:var(--teal-light);color:var(--teal-primary);border:1px solid #ccfbf1;">Clinical Rating Scale</span>
                 <h1>Brief Psychiatric Rating Scale (BPRS)</h1>
                 <p>Select the rating that best describes the patient's condition for each item.</p>
             </div>
-            <div class="bprs-header-score">
-                <small>Live Total Score</small>
-                <strong id="headerLiveScore">0</strong><span class="text-muted" style="font-size: 12px;"> / 126</span>
-            </div>
+            <div class="bprs-header-score"><small>Live Total</small><strong id="headerLiveScore">0</strong><span>/126</span></div>
         </div>
 
         <div class="bprs-scale-legend">
-            <div class="bprs-scale-legend-title"><i class="fa-solid fa-scale-balanced text-success me-1" aria-hidden="true"></i> Rating scale key</div>
+            <div class="bprs-scale-legend-title">Rating scale key</div>
             <div class="bprs-scale-badges">
                 <?php foreach ($rating_scale as $num => $label): ?>
                     <span class="bprs-scale-badge"><b><?php echo (int) $num; ?></b><?php echo bprs_escape($label); ?></span>
@@ -418,265 +418,85 @@ require 'layout/base.php';
 
         <form action="bprs-assessments.php" method="post" id="bprsForm" novalidate>
             <input type="hidden" name="csrf_token" value="<?php echo bprs_escape($_SESSION['bprs_csrf_token']); ?>">
-            
+
             <section class="patient-info-card" aria-label="Assessment details">
                 <div class="row g-3">
                     <div class="col-md-4">
-                        <label class="form-label" for="patient_id"><i class="fa-regular fa-user me-1" aria-hidden="true"></i> Client name <span class="text-danger">*</span></label>
+                        <label class="form-label" for="patient_id">Client name <span class="text-danger">*</span></label>
                         <select id="patient_id" name="patient_id" class="form-select" required>
-                            <option value="" disabled selected>Select a patient</option>
+                            <option value="">Select a patient</option>
                             <?php foreach ($patients as $patient): ?>
-                                <?php
-                                $patient_name = trim(($patient['first_name'] ?? '') . ' ' . ($patient['last_name'] ?? ''));
-                                $patient_label = $patient_name !== '' ? $patient_name : ($patient['email'] ?? 'Patient');
-                                ?>
-                                <option value="<?php echo (int) $patient['id']; ?>" data-client-name="<?php echo bprs_escape($patient_label); ?>" <?php echo $form_patient_id === (int) $patient['id'] ? 'selected' : ''; ?>>
-                                    <?php echo bprs_escape($patient_label); ?>
-                                </option>
+                                <?php $patient_name = trim(($patient['first_name'] ?? '') . ' ' . ($patient['last_name'] ?? '')) ?: ($patient['email'] ?? 'Patient'); ?>
+                                <option value="<?php echo (int) $patient['id']; ?>" <?php echo $form_patient_id === (int) $patient['id'] ? 'selected' : ''; ?>><?php echo bprs_escape($patient_name); ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
-                    <div class="col-md-2">
-                        <label class="form-label" for="assessment_date"><i class="fa-regular fa-calendar me-1" aria-hidden="true"></i> Date <span class="text-danger">*</span></label>
+                    <div class="col-md-3">
+                        <label class="form-label" for="assessment_date">Date <span class="text-danger">*</span></label>
                         <input type="date" id="assessment_date" name="assessment_date" class="form-control" value="<?php echo bprs_escape($form_date); ?>" required>
                     </div>
-                    <div class="col-md-3">
-                        <label class="form-label" for="md_name"><i class="fa-solid fa-user-doctor me-1" aria-hidden="true"></i> MD / Clinician</label>
-                        <input type="text" id="md_name" class="form-control bg-light" value="<?php echo bprs_escape($clinician_name); ?>" placeholder="Signed-in clinician" readonly>
+                    <div class="col-md-5">
+                        <label class="form-label" for="clinician_name">Clinician</label>
+                        <input type="text" id="clinician_name" class="form-control bg-light" value="<?php echo bprs_escape($clinician_name); ?>" readonly>
                     </div>
                 </div>
+
+                <?php $demographics['date'] = $demographics['date'] ?: $form_date; $demographics['filled_by'] = $demographics['filled_by'] ?: $clinician_name; echo assessment_demographics_html('demographics', $demographics, ['hide_fields' => ['date', 'client_name']]); ?>
             </section>
 
-            <!-- Unified Single Card Container for All 18 Items -->
             <div class="unified-questions-card">
-                <div class="unified-questions-header">
-                    <i class="fa-solid fa-list-check me-1"></i> Assessment Questions (18 Items)
-                </div>
-                <div>
-                    <?php foreach ($bprs_items as $index => $item): ?>
-                        <?php $field = $item['field']; ?>
-                        <div class="symptom-row<?php echo !empty($score_errors[$field]) ? ' has-score-error' : ''; ?>" id="card_<?php echo bprs_escape($field); ?>">
-                            <div class="symptom-title">
-                                <span class="symptom-title-text"><?php echo bprs_escape($item['title']); ?></span>
-                                <span class="selected-score-pill" id="badge_<?php echo bprs_escape($field); ?>">Score: 0</span>
-                            </div>
-                            <p class="symptom-desc"><?php echo bprs_escape($item['desc']); ?></p>
-                            
-                            <!-- 4-Column Layout Group for Options -->
-                            <div class="checkbox-scale-group" data-field="<?php echo bprs_escape($field); ?>">
-                                <?php foreach ($rating_scale as $score_val => $score_text): ?>
-                                    <?php
-                                    $submitted_score = $submitted_scores[$field] ?? null;
-                                    $submitted_score = is_string($submitted_score) || is_int($submitted_score)
-                                        ? filter_var($submitted_score, FILTER_VALIDATE_INT)
-                                        : false;
-                                    $checked = $submitted_score === $score_val;
-                                    ?>
-                                    <label class="score-checkbox-item<?php echo $checked ? ' active-check' : ''; ?>">
-                                        <input
-                                            type="checkbox"
-                                            name="scores[<?php echo bprs_escape($field); ?>]"
-                                            value="<?php echo (int) $score_val; ?>"
-                                            class="bprs-checkbox"
-                                            data-field="<?php echo bprs_escape($field); ?>"
-                                            <?php echo $checked ? 'checked' : ''; ?>
-                                            aria-label="<?php echo bprs_escape($item['title'] . ': ' . $score_val . ' ' . $score_text); ?>">
-                                        <span class="score-num"><?php echo (int) $score_val; ?></span>
-                                        <span class="score-text" title="<?php echo bprs_escape($score_text); ?>"><?php echo bprs_escape($score_text); ?></span>
-                                    </label>
-                                <?php endforeach; ?>
-                            </div>
-                            <p class="score-question-error" id="error_<?php echo bprs_escape($field); ?>" role="alert"><?php echo bprs_escape($score_errors[$field] ?? ''); ?></p>
+                <div class="unified-questions-header">Assessment Questions (18 Items)</div>
+                <?php foreach ($bprs_items as $item): ?>
+                    <?php $field = $item['field']; ?>
+                    <div class="symptom-row<?php echo !empty($score_errors[$field]) ? ' has-score-error' : ''; ?>">
+                        <div class="symptom-title"><span class="symptom-title-text"><?php echo bprs_escape($item['title']); ?></span><span class="selected-score-pill" id="badge_<?php echo bprs_escape($field); ?>">Score: 0</span></div>
+                        <p class="symptom-desc"><?php echo bprs_escape($item['desc']); ?></p>
+                        <div class="checkbox-scale-group" data-field="<?php echo bprs_escape($field); ?>">
+                            <?php foreach ($rating_scale as $score_val => $score_text): ?>
+                                <label class="score-checkbox-item">
+                                    <input type="radio" name="scores[<?php echo bprs_escape($field); ?>]" value="<?php echo (int) $score_val; ?>" required>
+                                    <span class="score-num"><?php echo (int) $score_val; ?></span><span class="score-text"><?php echo bprs_escape($score_text); ?></span>
+                                </label>
+                            <?php endforeach; ?>
                         </div>
-                    <?php endforeach; ?>
-                </div>
+                        <p class="score-question-error" role="alert"><?php echo bprs_escape($score_errors[$field] ?? ''); ?></p>
+                    </div>
+                <?php endforeach; ?>
             </div>
 
             <section class="patient-info-card mb-0">
-                <label class="form-label" for="clinical_notes"><i class="fa-regular fa-note-sticky me-1" aria-hidden="true"></i> Clinical notes <span class="text-muted fw-normal">(optional)</span></label>
-                <textarea id="clinical_notes" name="clinical_notes" class="form-control" rows="3" maxlength="5000" placeholder="Add relevant clinician notes..."><?php echo bprs_escape($form_notes); ?></textarea>
+                <label class="form-label" for="clinical_notes">Clinical Notes</label>
+                <textarea id="clinical_notes" name="clinical_notes" class="form-control" rows="4" maxlength="5000"><?php echo bprs_escape($form_notes); ?></textarea>
             </section>
 
             <div class="bprs-footer-bar">
-                <div class="total-score-box">
-                    <div>
-                        <span class="text-uppercase fw-bold text-secondary small d-block">Total BPRS score</span>
-                        <small class="text-muted">Sum of all 18 parameters</small>
-                    </div>
-                    <div class="total-score-number" id="footerLiveScore">0</div>
-                </div>
-                <div class="d-flex gap-2 action-buttons">
-                    <button type="reset" class="btn btn-outline-secondary px-4 py-2 fw-semibold" id="resetBprsBtn">
-                        <i class="fa-solid fa-rotate-left me-1" aria-hidden="true"></i> Reset form
-                    </button>
-                    <button type="submit" name="submit_bprs" value="1" class="btn btn-primary px-4 py-2 fw-semibold bprs-save-button" <?php echo empty($patients) || !$schema_ready ? 'disabled' : ''; ?>>
-                        <i class="fa-solid fa-floppy-disk me-1" aria-hidden="true"></i> Save BPRS assessment
-                    </button>
-                </div>
+                <div class="total-score-box"><span><strong>Live Total</strong><br><small>Maximum 126</small></span><span class="total-score-number" id="footerLiveScore">0</span></div>
+                <button type="submit" name="submit_bprs" value="1" class="btn btn-primary bprs-save-button">Save BPRS Assessment</button>
             </div>
         </form>
-
-        <p class="bprs-disclaimer">A score of 0 means “Not Assessed.” The total is a recorded score only and is not an automated diagnosis or substitute for clinical judgment.</p>
     </div>
 </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', function () {
-    var successToast = document.getElementById('bprsSuccessToast');
-    var errorToast = document.getElementById('bprsErrorToast');
-    var toast = successToast || errorToast;
-    var toastTimer;
-    if (toast) {
-        window.setTimeout(function () {
-            toast.classList.add('is-hiding');
-            window.setTimeout(function () {
-                if (successToast) {
-                    window.location.href = 'bprs-assessment-records.php';
-                }
-            }, 250);
-        }, 3000);
-    }
-
-    var checkboxes = document.querySelectorAll('.bprs-checkbox');
-    var fields = <?php echo json_encode(array_values(array_column($bprs_items, 'field'))); ?>;
-    var form = document.getElementById('bprsForm');
-    var patientSelect = document.getElementById('patient_id');
-    var assessmentDate = document.getElementById('assessment_date');
-
-    function showErrorToast(message) {
-        var currentToast = document.getElementById('bprsErrorToast');
-        if (!currentToast) {
-            currentToast = document.createElement('div');
-            currentToast.id = 'bprsErrorToast';
-            currentToast.className = 'bprs-toast bprs-toast-error';
-            currentToast.setAttribute('role', 'alert');
-            currentToast.setAttribute('aria-live', 'assertive');
-            var icon = document.createElement('span');
-            icon.className = 'bprs-toast-icon';
-            icon.setAttribute('aria-hidden', 'true');
-            var iconGlyph = document.createElement('i');
-            iconGlyph.className = 'fa-solid fa-triangle-exclamation';
-            icon.appendChild(iconGlyph);
-            var copy = document.createElement('span');
-            copy.className = 'bprs-toast-copy';
-            var title = document.createElement('strong');
-            title.className = 'bprs-toast-title';
-            title.textContent = 'Error!';
-            var text = document.createElement('span');
-            text.className = 'bprs-toast-message';
-            copy.append(title, text);
-            var progress = document.createElement('span');
-            progress.className = 'bprs-toast-progress';
-            progress.setAttribute('aria-hidden', 'true');
-            currentToast.append(icon, copy, progress);
-            document.body.appendChild(currentToast);
-        }
-        currentToast.querySelector('.bprs-toast-message').textContent = message;
-        currentToast.classList.remove('is-hiding');
-        var progressBar = currentToast.querySelector('.bprs-toast-progress');
-        progressBar.style.animation = 'none';
-        void progressBar.offsetWidth;
-        progressBar.style.animation = '';
-        window.clearTimeout(toastTimer);
-        toastTimer = window.setTimeout(function () {
-            currentToast.classList.add('is-hiding');
-        }, 3000);
-    }
-
-    function setQuestionError(field, message) {
-        var card = document.getElementById('card_' + field);
-        var error = document.getElementById('error_' + field);
-        if (!card || !error) {
-            return;
-        }
-        card.classList.toggle('has-score-error', message !== '');
-        error.textContent = message;
-    }
-
+(function () {
+    const fields = <?php echo json_encode(array_values(array_column($bprs_items, 'field'))); ?>;
     function updateTotal() {
-        var total = 0;
+        let total = 0;
         fields.forEach(function (field) {
-            var selected = document.querySelector('.bprs-checkbox[data-field="' + field + '"]:checked');
-            var score = selected ? Number(selected.value) : 0;
-            total += score;
-            var badge = document.getElementById('badge_' + field);
-            var card = document.getElementById('card_' + field);
-            if (badge) {
-                badge.textContent = 'Score: ' + score;
-            }
-            if (card) {
-                card.classList.toggle('rated-active', selected !== null);
-            }
+            const checked = document.querySelector('input[name="scores[' + field + ']"]:checked');
+            const value = checked ? Number(checked.value) : 0;
+            total += value;
+            const badge = document.getElementById('badge_' + field);
+            if (badge) badge.textContent = 'Score: ' + value;
+            const row = checked ? checked.closest('.symptom-row') : null;
+            if (row) row.classList.toggle('rated-active', !!checked);
         });
-        document.getElementById('headerLiveScore').textContent = String(total);
-        document.getElementById('footerLiveScore').textContent = String(total);
+        document.getElementById('headerLiveScore').textContent = total;
+        document.getElementById('footerLiveScore').textContent = total;
     }
-
-    checkboxes.forEach(function (checkbox) {
-        checkbox.addEventListener('change', function () {
-            var group = document.querySelectorAll('.bprs-checkbox[data-field="' + this.dataset.field + '"]');
-            if (this.checked) {
-                group.forEach(function (option) {
-                    if (option !== checkbox) {
-                        option.checked = false;
-                    }
-                });
-            }
-            setQuestionError(this.dataset.field, '');
-            group.forEach(function (option) {
-                option.closest('.score-checkbox-item').classList.toggle('active-check', option.checked);
-            });
-            updateTotal();
-        });
-    });
-
-    form.addEventListener('submit', function (event) {
-        var missingFields = [];
-        fields.forEach(function (field) {
-            var selected = document.querySelector('.bprs-checkbox[data-field="' + field + '"]:checked');
-            if (!selected) {
-                missingFields.push(field);
-                setQuestionError(field, 'Please select a rating for this question.');
-            } else {
-                setQuestionError(field, '');
-            }
-        });
-
-        if (missingFields.length > 0) {
-            event.preventDefault();
-            showErrorToast('Please select a rating for each highlighted question.');
-            var firstMissing = document.getElementById('card_' + missingFields[0]);
-            if (firstMissing) {
-                firstMissing.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
-            return;
-        }
-
-        if (!patientSelect.value || !assessmentDate.value || !assessmentDate.checkValidity()) {
-            event.preventDefault();
-            showErrorToast(!patientSelect.value
-                ? 'Please select a client.'
-                : 'Please enter a valid assessment date.');
-            var invalidControl = !patientSelect.value ? patientSelect : assessmentDate;
-            invalidControl.focus();
-            invalidControl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-    });
-
-    form.addEventListener('reset', function () {
-        window.setTimeout(function () {
-            fields.forEach(function (field) {
-                setQuestionError(field, '');
-            });
-            document.querySelectorAll('.score-checkbox-item').forEach(function (label) {
-                label.classList.toggle('active-check', label.querySelector('.bprs-checkbox').checked);
-            });
-            updateTotal();
-        }, 0);
-    });
-
+    document.querySelectorAll('#bprsForm input[type="radio"]').forEach(function (input) { input.addEventListener('change', updateTotal); });
     updateTotal();
-});
+})();
 </script>
 
 <?php require 'layout/footer.php'; ?>

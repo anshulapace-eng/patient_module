@@ -31,6 +31,14 @@ if ($ace_iii_schema_ready) {
         );
     }
     $status_check->free();
+
+    $demographic_check = $conn->query("SHOW COLUMNS FROM ace_iii_assessments LIKE 'demographic_data'");
+    if ($demographic_check && $demographic_check->num_rows === 0) {
+        $conn->query("ALTER TABLE ace_iii_assessments ADD COLUMN demographic_data LONGTEXT NULL AFTER clinical_notes");
+    }
+    if ($demographic_check) {
+        $demographic_check->free();
+    }
 }
 
 if (!$ace_iii_schema_ready) {
