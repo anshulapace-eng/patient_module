@@ -194,145 +194,699 @@ function panss_form_escape($value)
 
 require 'layout/base.php';
 ?>
-
 <style>
     :root {
-        --teal-primary: #0f766e;
-        --teal-hover: #115e59;
-        --teal-light: #f0fdfa;
-        --border-color: #e2e8f0;
-        --text-main: #0f172a;
-        --text-muted: #64748b;
+        --pf-primary: #0f766e;
+        --pf-primary-dark: #115e59;
+        --pf-primary-soft: #f0fdfa;
+        --pf-primary-border: #99f6e4;
+        --pf-border: #e2e8f0;
+        --pf-border-soft: #f1f5f9;
+        --pf-text: #0f172a;
+        --pf-muted: #64748b;
+        --pf-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.06), 0 2px 6px -1px rgba(15, 23, 42, 0.04);
     }
-    .panss-page { max-width: 1140px; margin: 0 auto; padding: 24px 16px 48px; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
-    
-    /* Header Card */
-    .panss-header { display: flex; justify-content: space-between; align-items: center; gap: 20px; margin-bottom: 24px; padding: 24px; border-radius: 12px; background: #fff; border: 1px solid var(--border-color); box-shadow: 0 1px 3px rgba(0,0,0,0.04); border-top: 4px solid var(--teal-primary); }
-    .panss-header h1 { margin: 0 0 4px; color: var(--text-main); font-size: 22px; font-weight: 700; }
-    .panss-header p { margin: 0; color: var(--text-muted); font-size: 13.5px; }
-    .panss-link { display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border: 1px solid var(--border-color); border-radius: 6px; background: #f8fafc; color: var(--text-main); text-decoration: none; font-size: 13px; font-weight: 600; transition: background 0.15s ease; }
-    .panss-link:hover { background: #f1f5f9; color: var(--teal-primary); }
+
+    .panss-page {
+        max-width: 1160px;
+        margin: 0 auto;
+        padding: 24px 16px 48px;
+        color: var(--pf-text);
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+
+    .panss-page [hidden] {
+        display: none !important;
+    }
+
+    /* Header Banner */
+    .panss-header {
+        background: #fff;
+        border: 1px solid var(--pf-border);
+        border-top: 4px solid var(--pf-primary);
+        border-radius: 14px;
+        padding: 20px 24px;
+        margin-bottom: 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 18px;
+        box-shadow: var(--pf-shadow);
+    }
+
+    .panss-eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 3px 10px;
+        border-radius: 999px;
+        background: var(--pf-primary-soft);
+        color: var(--pf-primary);
+        border: 1px solid var(--pf-primary-border);
+        font-size: 10.5px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        margin-bottom: 8px;
+    }
+
+    .panss-header h1 {
+        margin: 0;
+        font-size: 22px;
+        font-weight: 800;
+        letter-spacing: -0.01em;
+        color: var(--pf-text);
+    }
+
+    .panss-header p {
+        margin: 4px 0 0;
+        color: var(--pf-muted);
+        font-size: 13px;
+    }
+
+    .panss-header-right {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-shrink: 0;
+    }
+
+    .panss-progress-pill {
+        padding: 8px 14px;
+        border-radius: 9px;
+        background: #f8fafc;
+        border: 1px solid var(--pf-border);
+        font-size: 12.5px;
+        font-weight: 700;
+        color: #334155;
+        white-space: nowrap;
+    }
+
+    .panss-progress-pill strong {
+        color: var(--pf-primary);
+    }
+
+    .panss-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 9px 15px;
+        border: 1px solid #cbd5e1;
+        border-radius: 9px;
+        background: #fff;
+        color: #334155;
+        text-decoration: none;
+        font-size: 13px;
+        font-weight: 700;
+        transition: all 0.16s ease;
+        white-space: nowrap;
+    }
+
+    .panss-link:hover {
+        background: var(--pf-primary);
+        border-color: var(--pf-primary);
+        color: #fff;
+    }
 
     /* Toast */
-    .panss-toast { position: fixed; top: 14px; right: 16px; z-index: 1100; display: flex; width: min(360px, calc(100vw - 32px)); align-items: center; gap: 13px; overflow: hidden; padding: 12px 16px; border-radius: 6px; color: #fff; box-shadow: 0 4px 12px rgba(15,23,42,.2); opacity: 1; transform: translateY(0); transition: opacity .25s ease, transform .25s ease; }
-    .panss-toast-success { background: var(--teal-primary); }
-    .panss-toast-error { background: #dc3545; }
+    .panss-toast {
+        position: fixed;
+        top: 18px;
+        right: 18px;
+        z-index: 1100;
+        display: flex;
+        width: min(380px, calc(100vw - 36px));
+        align-items: center;
+        gap: 12px;
+        overflow: hidden;
+        padding: 13px 16px;
+        border-radius: 10px;
+        color: #fff;
+        box-shadow: 0 10px 25px rgba(15, 23, 42, 0.22);
+        opacity: 1;
+        transform: translateY(0);
+        transition: opacity 0.25s ease, transform 0.25s ease;
+    }
+
+    .panss-toast-success { background: var(--pf-primary); }
+    .panss-toast-error { background: #dc2626; }
     .panss-toast.is-hiding { opacity: 0; transform: translateY(-8px); }
-    .panss-toast-icon { display: grid; width: 36px; height: 36px; flex: 0 0 auto; place-items: center; border: 3px solid rgba(255,255,255,.9); border-radius: 50%; font-size: 16px; }
+
+    .panss-toast-icon {
+        display: grid;
+        width: 34px;
+        height: 34px;
+        flex: 0 0 34px;
+        place-items: center;
+        border: 2px solid rgba(255, 255, 255, 0.85);
+        border-radius: 50%;
+        font-size: 15px;
+    }
+
     .panss-toast-copy { min-width: 0; }
-    .panss-toast-title { margin-right: 8px; font-size: 15px; font-weight: 800; }
+    .panss-toast-title { margin-right: 6px; font-size: 14px; font-weight: 800; }
     .panss-toast-message { font-size: 12.5px; }
-    .panss-toast-progress { position: absolute; right: 0; bottom: 0; left: 0; height: 3px; background: rgba(255,255,255,.35); transform: scaleX(0); transform-origin: left; animation: panss-toast-progress 3s linear forwards; }
-    @keyframes panss-toast-progress { to { transform: scaleX(1); } }
 
-    /* Step Navigation Tabs */
-    .panss-tabs { display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 2px solid var(--border-color); padding-bottom: 0;  }
-    .panss-tab-btn { padding: 10px 18px; border: none; background: transparent; color: var(--text-muted); font-size: 14px; font-weight: 600; cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -2px; white-space: nowrap; transition: all 0.2s ease; }
-    .panss-tab-btn:hover:not(:disabled) { color: var(--teal-primary); }
-    .panss-tab-btn.active { color: var(--teal-primary); border-bottom-color: var(--teal-primary); background: #fff; border-top-left-radius: 6px; border-top-right-radius: 6px; border-left: 1px solid var(--border-color); border-right: 1px solid var(--border-color); }
-    .panss-tab-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .panss-toast-progress {
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        height: 3px;
+        background: rgba(255, 255, 255, 0.4);
+        transform: scaleX(0);
+        transform-origin: left;
+        animation: panss-toast-progress 3s linear forwards;
+    }
 
-    /* Panels & Sections */
-    .panss-panel, .panss-section { margin-bottom: 20px; border: 1px solid var(--border-color); border-radius: 10px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.02); overflow: hidden; }
-    .panss-panel { padding: 22px; }
-    .panss-panel h2, .panss-section h2 { margin: 0; color: var(--text-main); font-size: 15px; font-weight: 700; }
-    .panss-subtitle { margin: 4px 0 0; color: var(--text-muted); font-size: 12.5px; }
-    
-    .panss-meta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 16px; }
-    .panss-field label { display: block; margin-bottom: 6px; color: var(--text-main); font-size: 12px; font-weight: 600; }
-    .panss-field .form-control, .panss-field .form-select { min-height: 40px; border-color: #cbd5e1; border-radius: 6px; font-size: 13.5px; }
-    .panss-field .form-control:focus, .panss-field .form-select:focus { border-color: var(--teal-primary); box-shadow: 0 0 0 2px rgba(15,118,110,0.15); }
-    .panss-field.has-error .form-control, .panss-field.has-error .form-select, .panss-rating.has-error { border-color: #dc3545 !important; box-shadow: 0 0 0 2px rgba(220,53,69,0.15); }
-    .panss-field-error, .panss-item-error { display: block; margin-top: 5px; color: #dc3545; font-size: 11.5px; font-weight: 700; }
-    .panss-page [hidden] { display: none !important; }
-    
-    .panss-item-row.has-error { background: #fef2f2; }
-    .panss-section-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--border-color); background: #f8fafc; }
-    .panss-range { padding: 4px 10px; border-radius: 4px; background: var(--teal-light); color: var(--teal-primary); border: 1px solid #ccfbf1; font-size: 11.5px; font-weight: 700; white-space: nowrap; }
-    
-    .panss-table-wrap { padding: 0 20px 10px; }
-    .panss-table { width: 100%; border-collapse: collapse; }
-    .panss-table th, .panss-table td { padding: 11px 12px; border-bottom: 1px solid #f1f5f9; text-align: left; font-size: 13.5px; vertical-align: middle; }
-    .panss-table th { color: var(--text-muted); font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; background: #fff; }
-    .panss-table td { color: var(--text-main); }
-    
-    /* Compact Select Dropdown Width */
-    .panss-table select { width: 100%; max-width: 220px; height: 36px; padding: 5px 30px 5px 10px; font-size: 13px; border-radius: 6px; border-color: #cbd5e1; }
-    .panss-table select:focus { border-color: var(--teal-primary); box-shadow: 0 0 0 2px rgba(15,118,110,0.15); }
-    
-    .panss-item-code { display: inline-flex; min-width: 36px; justify-content: center; padding: 4px 8px; border-radius: 5px; background: #f1f5f9; color: var(--text-main); font-weight: 700; font-size: 12px; }
+    @keyframes panss-toast-progress {
+        to { transform: scaleX(1); }
+    }
 
-    /* Score Summary Card */
-    .panss-score-card { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
-    .panss-score-chip { flex: 1 1 150px; padding: 14px 16px; border: 1px solid var(--border-color); border-radius: 8px; background: #f8fafc; }
-    .panss-score-chip span { display: block; color: var(--text-muted); font-size: 11px; font-weight: 700; text-transform: uppercase; }
-    .panss-score-chip strong { display: block; margin-top: 4px; color: var(--teal-primary); font-size: 22px; font-weight: 700; }
+    /* Section Cards */
+    .panss-card {
+        background: #fff;
+        border: 1px solid var(--pf-border);
+        border-radius: 14px;
+        margin-bottom: 20px;
+        box-shadow: var(--pf-shadow);
+        overflow: hidden;
+    }
 
-    .panss-actions { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 16px; }
-    .panss-actions .btn-primary { background: var(--teal-primary); border-color: var(--teal-primary); padding: 9px 20px; font-weight: 600; font-size: 13.5px; border-radius: 6px; }
-    .panss-actions .btn-primary:hover { background: var(--teal-hover); border-color: var(--teal-hover); }
-    .panss-actions .btn-secondary { background: #e2e8f0; border-color: #cbd5e1; color: var(--text-main); padding: 9px 20px; font-weight: 600; font-size: 13.5px; border-radius: 6px; }
-    .panss-actions .btn-secondary:hover { background: #cbd5e1; }
+    .panss-card-head {
+        background: linear-gradient(to right, #f8fafc, #f1f5f9);
+        border-bottom: 1px solid var(--pf-border);
+        border-left: 4px solid var(--pf-primary);
+        padding: 13px 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+    }
 
-    .panss-note { padding: 12px 16px; border: 1px solid #bbf7d0; border-left: 4px solid #16a34a; border-radius: 6px; background: #f0fdf4; color: #166534; font-size: 12.5px; margin-bottom: 20px; }
-    
-    @media (max-width: 720px) { 
-        .panss-page { padding: 16px 10px 32px; } 
-        .panss-header { align-items: flex-start; flex-direction: column; padding: 18px; } 
-        .panss-meta { grid-template-columns: 1fr; } 
-        .panss-table-wrap { padding: 0 8px 8px; } 
-        .panss-table th, .panss-table td { padding: 10px 6px; } 
+    .panss-card-head h2 {
+        margin: 0;
+        font-size: 13.5px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--pf-text);
+    }
+
+    .panss-card-body {
+        padding: 20px 22px;
+    }
+
+    .panss-range {
+        padding: 4px 11px;
+        border-radius: 999px;
+        background: var(--pf-primary-soft);
+        color: var(--pf-primary);
+        border: 1px solid var(--pf-primary-border);
+        font-size: 11.5px;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    /* Meta Form Grid */
+    .panss-meta {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
+        margin-bottom: 10px;
+    }
+
+    .panss-field label {
+        display: block;
+        margin-bottom: 6px;
+        color: #334155;
+        font-size: 12.5px;
+        font-weight: 700;
+    }
+
+    .panss-field .form-control,
+    .panss-field .form-select {
+        min-height: 40px;
+        border-color: #cbd5e1;
+        border-radius: 8px;
+        font-size: 13.5px;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .panss-field .form-control:focus,
+    .panss-field .form-select:focus {
+        border-color: var(--pf-primary);
+        box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.14);
+    }
+
+    .panss-field.has-error .form-control,
+    .panss-field.has-error .form-select,
+    .panss-rating.has-error {
+        border-color: #dc2626 !important;
+        box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.14) !important;
+    }
+
+    .panss-field-error,
+    .panss-item-error {
+        display: block;
+        margin-top: 5px;
+        color: #dc2626;
+        font-size: 11.5px;
+        font-weight: 700;
+    }
+
+    /* Info Banner */
+    .panss-note {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 16px;
+        border: 1px solid var(--pf-primary-border);
+        border-left: 4px solid var(--pf-primary);
+        border-radius: 10px;
+        background: var(--pf-primary-soft);
+        color: #115e59;
+        font-size: 12.5px;
+        font-weight: 600;
+        margin-bottom: 20px;
+    }
+
+    /* 4-Step Interactive Stepper */
+    .panss-tabs {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+        margin-bottom: 20px;
+    }
+
+    .panss-tab-btn {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 14px;
+        border: 1.5px solid var(--pf-border);
+        border-radius: 12px;
+        background: #fff;
+        color: #475569;
+        text-align: left;
+        cursor: pointer;
+        transition: all 0.16s ease;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03);
+    }
+
+    .panss-tab-btn:hover:not(:disabled) {
+        border-color: #94a3b8;
+        transform: translateY(-1px);
+    }
+
+    .panss-tab-btn.active {
+        border-color: var(--pf-primary);
+        background: var(--pf-primary-soft);
+        color: var(--pf-text);
+        box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.1);
+    }
+
+    .panss-tab-btn:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+        background: #f8fafc;
+    }
+
+    .step-num {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        background: #f1f5f9;
+        color: #475569;
+        font-size: 12px;
+        font-weight: 800;
+        flex-shrink: 0;
+    }
+
+    .panss-tab-btn.active .step-num,
+    .panss-tab-btn.is-done .step-num {
+        background: var(--pf-primary);
+        color: #fff;
+    }
+
+    .step-copy {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .step-title {
+        font-size: 13px;
+        font-weight: 800;
+        line-height: 1.2;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .step-sub {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--pf-muted);
+        margin-top: 2px;
+    }
+
+    /* Section Progress Strip */
+    .section-progress-track {
+        height: 4px;
+        background: #e2e8f0;
+        width: 100%;
+    }
+
+    .section-progress-fill {
+        height: 100%;
+        width: 0%;
+        background: var(--pf-primary);
+        transition: width 0.25s ease;
+    }
+
+    /* Rating Table */
+    .panss-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .panss-table thead th {
+        background: #f8fafc;
+        color: #475569;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        padding: 12px 18px;
+        border-bottom: 1px solid var(--pf-border);
+        text-align: left;
+    }
+
+    .panss-table tbody tr {
+        transition: background-color 0.15s ease;
+    }
+
+    .panss-table tbody tr:hover {
+        background: #f8fafc;
+    }
+
+    .panss-table tbody tr.is-rated {
+        background: #fcfefd;
+    }
+
+    .panss-table tbody td {
+        padding: 12px 18px;
+        border-bottom: 1px solid var(--pf-border-soft);
+        font-size: 13.5px;
+        vertical-align: middle;
+    }
+
+    .panss-table tbody tr:last-child td {
+        border-bottom: 0;
+    }
+
+    .panss-item-row.has-error {
+        background: #fef2f2;
+    }
+
+    .panss-item-code {
+        display: inline-flex;
+        min-width: 38px;
+        justify-content: center;
+        padding: 4px 8px;
+        border-radius: 7px;
+        background: #f1f5f9;
+        color: #334155;
+        font-weight: 800;
+        font-size: 12px;
+    }
+
+    tr.is-rated .panss-item-code {
+        background: var(--pf-primary);
+        color: #fff;
+    }
+
+    .panss-table select {
+        width: 100%;
+        max-width: 240px;
+        height: 38px;
+        padding: 6px 32px 6px 12px;
+        font-size: 13px;
+        font-weight: 600;
+        border-radius: 8px;
+        border: 1.5px solid #cbd5e1;
+        background-color: #fff;
+        transition: all 0.15s ease;
+    }
+
+    .panss-table select:focus {
+        border-color: var(--pf-primary);
+        box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.14);
+    }
+
+    tr.is-rated select {
+        border-color: #5eead4;
+        background-color: var(--pf-primary-soft);
+        color: #0f766e;
+    }
+
+    /* Summary KPI Cards */
+    .panss-score-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+    }
+
+    .panss-score-chip {
+        padding: 16px 18px;
+        border: 1px solid var(--pf-border);
+        border-top: 3px solid var(--chip-accent, var(--pf-primary));
+        border-radius: 12px;
+        background: #f8fafc;
+    }
+
+    .panss-score-chip span {
+        display: block;
+        color: var(--pf-muted);
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+
+    .panss-score-chip strong {
+        display: block;
+        margin-top: 6px;
+        color: var(--pf-text);
+        font-size: 26px;
+        font-weight: 800;
+        line-height: 1;
+    }
+
+    .panss-score-chip small {
+        display: block;
+        margin-top: 5px;
+        font-size: 11px;
+        color: var(--pf-muted);
+    }
+
+    /* Step Actions */
+    .panss-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        margin-top: 16px;
+        margin-bottom: 20px;
+    }
+
+    .panss-btn-primary {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        background: var(--pf-primary);
+        border: 1px solid var(--pf-primary);
+        color: #fff;
+        padding: 10px 22px;
+        font-weight: 700;
+        font-size: 13.5px;
+        border-radius: 9px;
+        cursor: pointer;
+        transition: all 0.16s ease;
+    }
+
+    .panss-btn-primary:hover:not(:disabled) {
+        background: var(--pf-primary-dark);
+        border-color: var(--pf-primary-dark);
+        transform: translateY(-1px);
+    }
+
+    .panss-btn-secondary {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        background: #fff;
+        border: 1px solid #cbd5e1;
+        color: #334155;
+        padding: 10px 20px;
+        font-weight: 700;
+        font-size: 13.5px;
+        border-radius: 9px;
+        cursor: pointer;
+        transition: all 0.16s ease;
+    }
+
+    .panss-btn-secondary:hover {
+        background: #f8fafc;
+        border-color: #94a3b8;
+    }
+
+    /* Sticky Live Score Bar */
+    .panss-sticky-bar {
+        position: sticky;
+        bottom: 12px;
+        z-index: 40;
+        background: rgba(15, 23, 42, 0.96);
+        backdrop-filter: blur(8px);
+        color: #fff;
+        border-radius: 12px;
+        padding: 12px 20px;
+        box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.28);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 14px;
+        flex-wrap: wrap;
+        margin-top: 10px;
+    }
+
+    .panss-sticky-scores {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        flex-wrap: wrap;
+        font-size: 12.5px;
+    }
+
+    .panss-sticky-scores span {
+        color: #94a3b8;
+    }
+
+    .panss-sticky-scores strong {
+        color: #5eead4;
+        font-weight: 800;
+        margin-left: 4px;
+    }
+
+    .panss-sticky-comp {
+        background: var(--pf-primary);
+        color: #fff;
+        padding: 5px 12px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 800;
+    }
+
+    .notes-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 6px;
+    }
+
+    .notes-counter {
+        font-size: 11.5px;
+        font-weight: 600;
+        color: var(--pf-muted);
+    }
+
+    @media (max-width: 960px) {
+        .panss-tabs,
+        .panss-score-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .panss-meta {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @media (max-width: 700px) {
+        .panss-page { padding: 16px 12px 32px; }
+        .panss-header { flex-direction: column; align-items: flex-start; }
+        .panss-header-right { width: 100%; justify-content: space-between; }
+        .panss-table thead th,
+        .panss-table tbody td { padding: 10px 10px; }
         .panss-table select { max-width: 100%; }
+    }
+
+    @media (max-width: 520px) {
+        .panss-tabs,
+        .panss-score-grid {
+            grid-template-columns: 1fr;
+        }
     }
 </style>
 
-<div class="container-fluid py-3 px-2 px-md-4" style="background-color: #f8fafc; min-height: 100vh;">
-    <div class="panss-page">
-        <div class="panss-header">
-            <div>
-                <span class="badge mb-1 px-2.5 py-1" style="background:var(--teal-light);color:var(--teal-primary);border:1px solid #ccfbf1;font-size:10.5px;font-weight:700;">
-                    <i class="fa-solid fa-notes-medical me-1" aria-hidden="true"></i> Psychiatric Clinical Evaluation
-                </span>
-                <h1>PANSS Assessment Module</h1>
-                <p>Rate all 30 coded items across Positive, Negative, and General Psychopathology scales.</p>
+<div class="panss-page">
+    <!-- Header Banner -->
+    <header class="panss-header">
+        <div>
+            <div class="panss-eyebrow">
+                <i class="fa-solid fa-notes-medical" aria-hidden="true"></i> Psychiatric Clinical Evaluation
             </div>
-            <a class="panss-link" href="panss-assessment-records.php"><i class="bi bi-table" aria-hidden="true"></i> View records</a>
+            <h1>PANSS Assessment Module</h1>
+            <p>Rate all 30 coded items across Positive, Negative, and General Psychopathology scales.</p>
         </div>
-
-        <?php if ($success_msg !== ''): ?>
-            <div class="panss-toast panss-toast-success" id="panssSuccessToast" role="status" aria-live="polite">
-                <span class="panss-toast-icon" aria-hidden="true"><i class="fa-solid fa-check"></i></span>
-                <span class="panss-toast-copy"><strong class="panss-toast-title">Success!</strong><span class="panss-toast-message"><?php echo panss_form_escape($success_msg); ?></span></span>
-                <span class="panss-toast-progress" aria-hidden="true"></span>
+        <div class="panss-header-right">
+            <div class="panss-progress-pill" aria-live="polite">
+                Progress: <strong id="overallRatedCount">0</strong> / 30
             </div>
-        <?php endif; ?>
-        
-        <!-- Dynamic Toast Container for JavaScript Error Popups -->
-        <div class="panss-toast panss-toast-error" id="panssJsErrorToast" role="alert" aria-live="assertive" style="display: none;">
+            <a class="panss-link" href="panss-assessment-records.php">
+                <i class="bi bi-table" aria-hidden="true"></i> View Records
+            </a>
+        </div>
+    </header>
+
+    <?php if ($success_msg !== ''): ?>
+        <div class="panss-toast panss-toast-success" id="panssSuccessToast" role="status" aria-live="polite">
+            <span class="panss-toast-icon" aria-hidden="true"><i class="fa-solid fa-check"></i></span>
+            <span class="panss-toast-copy"><strong class="panss-toast-title">Success!</strong><span class="panss-toast-message"><?php echo panss_form_escape($success_msg); ?></span></span>
+            <span class="panss-toast-progress" aria-hidden="true"></span>
+        </div>
+    <?php endif; ?>
+
+    <div class="panss-toast panss-toast-error" id="panssJsErrorToast" role="alert" aria-live="assertive" style="display: none;">
+        <span class="panss-toast-icon" aria-hidden="true"><i class="fa-solid fa-triangle-exclamation"></i></span>
+        <span class="panss-toast-copy"><strong class="panss-toast-title">Error!</strong><span class="panss-toast-message" id="panssJsErrorMessage"></span></span>
+        <span class="panss-toast-progress" id="panssJsErrorProgress" aria-hidden="true"></span>
+    </div>
+
+    <?php if ($error_msg !== ''): ?>
+        <div class="panss-toast panss-toast-error" id="panssErrorToast" role="alert" aria-live="assertive">
             <span class="panss-toast-icon" aria-hidden="true"><i class="fa-solid fa-triangle-exclamation"></i></span>
-            <span class="panss-toast-copy"><strong class="panss-toast-title">Error!</strong><span class="panss-toast-message" id="panssJsErrorMessage"></span></span>
-            <span class="panss-toast-progress" id="panssJsErrorProgress" aria-hidden="true"></span>
+            <span class="panss-toast-copy"><strong class="panss-toast-title">Error!</strong><span class="panss-toast-message"><?php echo panss_form_escape($error_msg); ?></span></span>
+            <span class="panss-toast-progress" aria-hidden="true"></span>
         </div>
+    <?php endif; ?>
 
-        <?php if ($error_msg !== ''): ?>
-            <div class="panss-toast panss-toast-error" id="panssErrorToast" role="alert" aria-live="assertive">
-                <span class="panss-toast-icon" aria-hidden="true"><i class="fa-solid fa-triangle-exclamation"></i></span>
-                <span class="panss-toast-copy"><strong class="panss-toast-title">Error!</strong><span class="panss-toast-message"><?php echo panss_form_escape($error_msg); ?></span></span>
-                <span class="panss-toast-progress" aria-hidden="true"></span>
+    <form method="post" action="panss-assessments.php" id="panssForm" novalidate>
+        <input type="hidden" name="csrf_token" value="<?php echo panss_form_escape($_SESSION['panss_csrf_token']); ?>">
+
+        <!-- Patient & Assessment Details -->
+        <section class="panss-card" id="topDetailsPanel">
+            <div class="panss-card-head">
+                <h2>Patient &amp; Assessment Details</h2>
             </div>
-        <?php endif; ?>
-
-        <form method="post" action="panss-assessments.php" id="panssForm" novalidate>
-            <input type="hidden" name="csrf_token" value="<?php echo panss_form_escape($_SESSION['panss_csrf_token']); ?>">
-
-            <section class="panss-panel" id="topDetailsPanel">
-                <h2>Assessment Details</h2>
-                <p class="panss-subtitle">Select the target patient and record the assessment date.</p>
+            <div class="panss-card-body">
                 <div class="panss-meta">
                     <div class="panss-field<?php echo isset($field_errors['patient_id']) ? ' has-error' : ''; ?>" id="patient_idField">
                         <label for="patient_id">Client Name <span class="text-danger">*</span></label>
                         <select class="form-select" id="patient_id" name="patient_id" required aria-describedby="error_patient_id">
-                            <option value="">Select a patient...</option>
+                            <option value="">-- Select Patient --</option>
                             <?php foreach ($patients as $patient): ?>
                                 <?php
                                 $patient_name = trim(($patient['first_name'] ?? '') . ' ' . ($patient['last_name'] ?? ''));
@@ -357,115 +911,178 @@ require 'layout/base.php';
                 </div>
 
                 <?php echo assessment_demographics_html('demographics', $demographics, ['hide_fields' => ['date', 'client_name']]); ?>
-            </section>
-
-            <div class="panss-note">
-                <i class="fa-solid fa-circle-info me-1"></i> Item names reflect standard clinical terminology for rating criteria. Ensure proper instrument guidelines are followed.
             </div>
+        </section>
 
-            <!-- Navigation Tabs -->
-            <div class="panss-tabs" role="tablist">
-                <button type="button" class="panss-tab-btn active" data-tab="tab-P" role="tab" aria-selected="true">1. Positive Scale</button>
-                <button type="button" class="panss-tab-btn" data-tab="tab-N" role="tab" aria-selected="false" disabled>2. Negative Scale</button>
-                <button type="button" class="panss-tab-btn" data-tab="tab-G" role="tab" aria-selected="false" disabled>3. General Psychopathology</button>
-                <button type="button" class="panss-tab-btn" data-tab="tab-summary" role="tab" aria-selected="false" disabled>4. Summary & Submit</button>
-            </div>
+        <div class="panss-note">
+            <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+            <span>Item names reflect standard clinical terminology for rating criteria. Rate each item from 1 (Absent) to 7 (Extreme).</span>
+        </div>
 
-            <!-- Tab Content Sections -->
-            <?php foreach ($panss_sections as $prefix => $section): ?>
-                <?php
-                $minimum = $section['count'];
-                $maximum = $section['count'] * 7;
-                $is_first = ($prefix === 'P');
-                ?>
-                <div class="panss-tab-pane" id="tab-<?php echo panss_form_escape($prefix); ?>" <?php echo $is_first ? '' : 'hidden'; ?>>
-                    <section class="panss-section" aria-labelledby="section-<?php echo panss_form_escape($prefix); ?>">
-                        <div class="panss-section-head">
-                            <div>
-                                <h2 id="section-<?php echo panss_form_escape($prefix); ?>"><?php echo panss_form_escape($section['title']); ?></h2>
-                                <p class="panss-subtitle"><?php echo (int) $section['count']; ?> items total · select one severity score per item</p>
-                            </div>
-                            <span class="panss-range">Range: <?php echo $minimum; ?>–<?php echo $maximum; ?></span>
-                        </div>
-                        <div class="table-responsive panss-table-wrap">
-                            <table class="panss-table">
-                                <thead>
-                                    <tr>
-                                        <th style="width: 80px;">Code</th>
-                                        <th>Item Description</th>
-                                        <th style="width: 250px;">Severity Rating</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <?php foreach ($panss_items[$prefix] as $code => $label): ?>
-                                        <?php
-                                        $raw_score = $submitted_scores[$code] ?? '';
-                                        $selected_score = is_string($raw_score) || is_int($raw_score) ? (string) $raw_score : '';
-                                        ?>
-                                        <tr>
-                                            <td><span class="panss-item-code"><?php echo panss_form_escape($code); ?></span></td>
-                                            <td class="fw-semibold text-dark"><?php echo panss_form_escape($label); ?></td>
-                                            <td class="panss-item-row<?php echo isset($score_errors[$code]) ? ' has-error' : ''; ?>" id="row_<?php echo panss_form_escape($code); ?>">
-                                                <select class="form-select form-select-sm panss-rating<?php echo isset($score_errors[$code]) ? ' has-error' : ''; ?>" name="scores[<?php echo panss_form_escape($code); ?>]" data-code="<?php echo panss_form_escape($code); ?>" data-section="<?php echo panss_form_escape($prefix); ?>" required aria-label="Rating for <?php echo panss_form_escape($code); ?>" aria-describedby="error_<?php echo panss_form_escape($code); ?>">
-                                                    <option value="">Select rating...</option>
-                                                    <?php foreach ($panss_rating_labels as $rating => $rating_label): ?>
-                                                        <option value="<?php echo $rating; ?>" <?php echo $selected_score === (string) $rating ? 'selected' : ''; ?>><?php echo $rating . ' - ' . panss_form_escape($rating_label); ?></option>
-                                                    <?php endforeach; ?>
-                                                </select>
-                                                <?php if (isset($score_errors[$code])): ?>
-                                                    <small class="panss-item-error" id="error_<?php echo panss_form_escape($code); ?>" role="alert"><?php echo panss_form_escape($score_errors[$code]); ?></small>
-                                                <?php else: ?>
-                                                    <small class="panss-item-error" id="error_<?php echo panss_form_escape($code); ?>" role="alert" hidden></small>
-                                                <?php endif; ?>
-                                            </td>
-                                        </tr>
-                                    <?php endforeach; ?>
-                                </tbody>
-                            </table>
-                        </div>
-                    </section>
-                    
-                    <!-- Step Nav Buttons -->
-                    <div class="panss-actions">
-                        <?php if ($prefix !== 'P'): ?>
-                            <button type="button" class="btn btn-secondary panss-prev-btn">Previous Step</button>
-                        <?php else: ?>
-                            <div></div>
-                        <?php endif; ?>
-                        <button type="button" class="btn btn-primary panss-next-btn">Next Step</button>
+        <!-- 4-Step Navigation Stepper -->
+        <div class="panss-tabs" role="tablist">
+            <button type="button" class="panss-tab-btn active" data-tab="tab-P" role="tab" aria-selected="true">
+                <span class="step-num">01</span>
+                <span class="step-copy">
+                    <span class="step-title">Positive Scale</span>
+                    <span class="step-sub" id="stepSubP">0 / 7 rated</span>
+                </span>
+            </button>
+            <button type="button" class="panss-tab-btn" data-tab="tab-N" role="tab" aria-selected="false" disabled>
+                <span class="step-num">02</span>
+                <span class="step-copy">
+                    <span class="step-title">Negative Scale</span>
+                    <span class="step-sub" id="stepSubN">0 / 7 rated</span>
+                </span>
+            </button>
+            <button type="button" class="panss-tab-btn" data-tab="tab-G" role="tab" aria-selected="false" disabled>
+                <span class="step-num">03</span>
+                <span class="step-copy">
+                    <span class="step-title">General Scale</span>
+                    <span class="step-sub" id="stepSubG">0 / 16 rated</span>
+                </span>
+            </button>
+            <button type="button" class="panss-tab-btn" data-tab="tab-summary" role="tab" aria-selected="false" disabled>
+                <span class="step-num">04</span>
+                <span class="step-copy">
+                    <span class="step-title">Summary &amp; Save</span>
+                    <span class="step-sub">Review &amp; submit</span>
+                </span>
+            </button>
+        </div>
+
+        <!-- Tab Content Sections -->
+        <?php foreach ($panss_sections as $prefix => $section): ?>
+            <?php
+            $minimum = $section['count'];
+            $maximum = $section['count'] * 7;
+            $is_first = ($prefix === 'P');
+            ?>
+            <div class="panss-tab-pane" id="tab-<?php echo panss_form_escape($prefix); ?>" <?php echo $is_first ? '' : 'hidden'; ?>>
+                <section class="panss-card" aria-labelledby="section-<?php echo panss_form_escape($prefix); ?>">
+                    <div class="panss-card-head">
+                        <h2 id="section-<?php echo panss_form_escape($prefix); ?>"><?php echo panss_form_escape($section['title']); ?> (<?php echo (int) $section['count']; ?> Items)</h2>
+                        <span class="panss-range">Range: <?php echo $minimum; ?>–<?php echo $maximum; ?></span>
                     </div>
-                </div>
-            <?php endforeach; ?>
-
-            <!-- Tab 4: Summary & Submit -->
-            <div class="panss-tab-pane" id="tab-summary" hidden>
-                <section class="panss-panel">
-                    <h2>Score Summary</h2>
-                    <p class="panss-subtitle mb-3">Subtotals compute dynamically. Composite score represents Positive minus Negative.</p>
-                    <div class="panss-score-card">
-                        <div class="panss-score-chip"><span>Positive Scale (7–49)</span><strong id="positiveTotal">0</strong></div>
-                        <div class="panss-score-chip"><span>Negative Scale (7–49)</span><strong id="negativeTotal">0</strong></div>
-                        <div class="panss-score-chip"><span>General Psychopathology (16–112)</span><strong id="generalTotal">0</strong></div>
-                        <div class="panss-score-chip"><span>Composite Score (−42 to +42)</span><strong id="compositeTotal">0</strong></div>
+                    <div class="section-progress-track">
+                        <div class="section-progress-fill" id="progressFill_<?php echo panss_form_escape($prefix); ?>"></div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="panss-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 90px;">Code</th>
+                                    <th>Symptom / Item Description</th>
+                                    <th style="width: 270px;">Severity Rating (1–7)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($panss_items[$prefix] as $code => $label): ?>
+                                    <?php
+                                    $raw_score = $submitted_scores[$code] ?? '';
+                                    $selected_score = is_string($raw_score) || is_int($raw_score) ? (string) $raw_score : '';
+                                    ?>
+                                    <tr class="<?php echo $selected_score !== '' ? 'is-rated' : ''; ?>">
+                                        <td><span class="panss-item-code"><?php echo panss_form_escape($code); ?></span></td>
+                                        <td class="fw-semibold text-dark"><?php echo panss_form_escape($label); ?></td>
+                                        <td class="panss-item-row<?php echo isset($score_errors[$code]) ? ' has-error' : ''; ?>" id="row_<?php echo panss_form_escape($code); ?>">
+                                            <select class="form-select form-select-sm panss-rating<?php echo isset($score_errors[$code]) ? ' has-error' : ''; ?>" name="scores[<?php echo panss_form_escape($code); ?>]" data-code="<?php echo panss_form_escape($code); ?>" data-section="<?php echo panss_form_escape($prefix); ?>" required aria-label="Rating for <?php echo panss_form_escape($code); ?>" aria-describedby="error_<?php echo panss_form_escape($code); ?>">
+                                                <option value="">Select rating...</option>
+                                                <?php foreach ($panss_rating_labels as $rating => $rating_label): ?>
+                                                    <option value="<?php echo $rating; ?>" <?php echo $selected_score === (string) $rating ? 'selected' : ''; ?>><?php echo $rating . ' — ' . panss_form_escape($rating_label); ?></option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                            <?php if (isset($score_errors[$code])): ?>
+                                                <small class="panss-item-error" id="error_<?php echo panss_form_escape($code); ?>" role="alert"><?php echo panss_form_escape($score_errors[$code]); ?></small>
+                                            <?php else: ?>
+                                                <small class="panss-item-error" id="error_<?php echo panss_form_escape($code); ?>" role="alert" hidden></small>
+                                            <?php endif; ?>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
                     </div>
                 </section>
 
-                <section class="panss-panel">
+                <div class="panss-actions">
+                    <?php if ($prefix !== 'P'): ?>
+                        <button type="button" class="panss-btn-secondary panss-prev-btn">&larr; Previous Step</button>
+                    <?php else: ?>
+                        <div></div>
+                    <?php endif; ?>
+                    <button type="button" class="panss-btn-primary panss-next-btn">Next Step &rarr;</button>
+                </div>
+            </div>
+        <?php endforeach; ?>
+
+        <!-- Tab 4: Summary & Submit -->
+        <div class="panss-tab-pane" id="tab-summary" hidden>
+            <section class="panss-card">
+                <div class="panss-card-head">
+                    <h2>Score Summary</h2>
+                    <span class="panss-range">Auto-Calculated</span>
+                </div>
+                <div class="panss-card-body">
+                    <div class="panss-score-grid">
+                        <div class="panss-score-chip" style="--chip-accent: #4f46e5;">
+                            <span>Positive Scale</span>
+                            <strong id="positiveTotal">0</strong>
+                            <small>Range: 7 – 49</small>
+                        </div>
+                        <div class="panss-score-chip" style="--chip-accent: #0ea5e9;">
+                            <span>Negative Scale</span>
+                            <strong id="negativeTotal">0</strong>
+                            <small>Range: 7 – 49</small>
+                        </div>
+                        <div class="panss-score-chip" style="--chip-accent: #0f766e;">
+                            <span>General Psychopathology</span>
+                            <strong id="generalTotal">0</strong>
+                            <small>Range: 16 – 112</small>
+                        </div>
+                        <div class="panss-score-chip" style="--chip-accent: #10b981;">
+                            <span>Composite Score (P − N)</span>
+                            <strong id="compositeTotal">0</strong>
+                            <small>Range: −42 to +42</small>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="panss-card">
+                <div class="panss-card-head">
+                    <h2>Clinical Observations &amp; Notes</h2>
+                </div>
+                <div class="panss-card-body">
                     <div class="panss-field<?php echo isset($field_errors['clinical_notes']) ? ' has-error' : ''; ?>" id="clinical_notesField">
-                        <label for="clinical_notes">Clinical Observations & Notes <span class="text-muted fw-normal">(Optional)</span></label>
+                        <div class="notes-head">
+                            <label for="clinical_notes" class="mb-0">Examiner Notes <span class="text-muted fw-normal">(Optional)</span></label>
+                            <span class="notes-counter"><span id="notesCharCount">0</span> / 5,000</span>
+                        </div>
                         <textarea class="form-control" id="clinical_notes" name="clinical_notes" rows="4" maxlength="5000" placeholder="Enter behavioral observations or additional clinical context..." aria-describedby="error_clinical_notes"><?php echo panss_form_escape($form_notes); ?></textarea>
                         <small class="panss-field-error" id="error_clinical_notes" role="alert" <?php echo isset($field_errors['clinical_notes']) ? '' : 'hidden'; ?>><?php echo panss_form_escape($field_errors['clinical_notes'] ?? ''); ?></small>
                     </div>
-                    <div class="panss-actions">
-                        <button type="button" class="btn btn-secondary panss-prev-btn">Previous Step</button>
-                        <button class="btn btn-primary" type="submit" name="submit_panss" value="1" <?php echo empty($patients) || !$schema_ready ? 'disabled' : ''; ?>>
-                            <i class="bi bi-check2-circle me-1" aria-hidden="true"></i> Save Assessment
-                        </button>
-                    </div>
-                </section>
+                </div>
+            </section>
+
+            <div class="panss-actions">
+                <button type="button" class="panss-btn-secondary panss-prev-btn">&larr; Previous Step</button>
+                <button class="panss-btn-primary" type="submit" name="submit_panss" value="1" <?php echo empty($patients) || !$schema_ready ? 'disabled' : ''; ?>>
+                    <i class="bi bi-check2-circle" aria-hidden="true"></i> Save PANSS Assessment
+                </button>
             </div>
-        </form>
-    </div>
+        </div>
+
+        <!-- Sticky Live Score Footer -->
+        <div class="panss-sticky-bar" aria-live="polite">
+            <div class="panss-sticky-scores">
+                <div><span>Positive:</span><strong id="stickyP">0</strong>/49</div>
+                <div><span>Negative:</span><strong id="stickyN">0</strong>/49</div>
+                <div><span>General:</span><strong id="stickyG">0</strong>/112</div>
+            </div>
+            <div class="panss-sticky-comp">Composite: <span id="stickyComp">0</span></div>
+        </div>
+    </form>
 </div>
 
 <script>
@@ -477,7 +1094,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var jsErrorProgress = document.getElementById('panssJsErrorProgress');
     var toastTimer = null;
     var toast = successToast || errorToast;
-    
+
     if (toast) {
         window.setTimeout(function () {
             toast.classList.add('is-hiding');
@@ -494,7 +1111,7 @@ document.addEventListener('DOMContentLoaded', function () {
         jsErrorMessage.textContent = message;
         jsErrorToast.style.display = 'flex';
         jsErrorToast.classList.remove('is-hiding');
-        
+
         if (jsErrorProgress) {
             jsErrorProgress.style.animation = 'none';
             void jsErrorProgress.offsetWidth;
@@ -502,9 +1119,9 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         window.clearTimeout(toastTimer);
-        toastTimer = window.setTimeout(function() {
+        toastTimer = window.setTimeout(function () {
             jsErrorToast.classList.add('is-hiding');
-            window.setTimeout(function() {
+            window.setTimeout(function () {
                 jsErrorToast.style.display = 'none';
             }, 250);
         }, 3500);
@@ -518,6 +1135,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var patientSelect = document.getElementById('patient_id');
     var assessmentDate = document.getElementById('assessment_date');
     var notesInput = document.getElementById('clinical_notes');
+    var notesCountEl = document.getElementById('notesCharCount');
     var targets = {
         P: document.getElementById('positiveTotal'),
         N: document.getElementById('negativeTotal'),
@@ -527,9 +1145,7 @@ document.addEventListener('DOMContentLoaded', function () {
     function setFieldError(field, message) {
         var fieldContainer = document.getElementById(field + 'Field');
         var error = document.getElementById('error_' + field);
-        if (!fieldContainer || !error) {
-            return;
-        }
+        if (!fieldContainer || !error) return;
         fieldContainer.classList.toggle('has-error', message !== '');
         error.textContent = message;
         error.hidden = message === '';
@@ -539,9 +1155,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var row = document.getElementById('row_' + control.dataset.code);
         var error = document.getElementById('error_' + control.dataset.code);
         control.classList.toggle('has-error', message !== '');
-        if (row) {
-            row.classList.toggle('has-error', message !== '');
-        }
+        if (row) row.classList.toggle('has-error', message !== '');
         if (error) {
             error.textContent = message;
             error.hidden = message === '';
@@ -552,9 +1166,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var sectionControls = document.querySelectorAll('.panss-rating[data-section="' + sectionPrefix + '"]');
         var complete = true;
         sectionControls.forEach(function (ctrl) {
-            if (ctrl.value === '') {
-                complete = false;
-            }
+            if (ctrl.value === '') complete = false;
         });
         return complete;
     }
@@ -565,9 +1177,7 @@ document.addEventListener('DOMContentLoaded', function () {
         sectionControls.forEach(function (ctrl) {
             if (ctrl.value === '') {
                 setRatingError(ctrl, 'Please select a rating for this item.');
-                if (!firstMissing) {
-                    firstMissing = ctrl;
-                }
+                if (!firstMissing) firstMissing = ctrl;
             } else {
                 setRatingError(ctrl, '');
             }
@@ -582,10 +1192,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
         tabs.forEach(function (tab) {
             var target = tab.dataset.tab;
-            if (target === 'tab-N') {
+            if (target === 'tab-P') {
+                tab.classList.toggle('is-done', pComplete);
+            } else if (target === 'tab-N') {
                 tab.disabled = !pComplete;
+                tab.classList.toggle('is-done', nComplete);
             } else if (target === 'tab-G') {
                 tab.disabled = !(pComplete && nComplete);
+                tab.classList.toggle('is-done', gComplete);
             } else if (target === 'tab-summary') {
                 tab.disabled = !(pComplete && nComplete && gComplete);
             }
@@ -594,9 +1208,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function switchTab(targetId) {
         var targetTabBtn = document.querySelector('.panss-tab-btn[data-tab="' + targetId + '"]');
-        if (targetTabBtn) {
-            targetTabBtn.disabled = false;
-        }
+        if (targetTabBtn) targetTabBtn.disabled = false;
 
         tabs.forEach(function (t) {
             var active = t.dataset.tab === targetId;
@@ -611,9 +1223,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     tabs.forEach(function (tab) {
         tab.addEventListener('click', function () {
-            if (!tab.disabled) {
-                switchTab(tab.dataset.tab);
-            }
+            if (!tab.disabled) switchTab(tab.dataset.tab);
         });
     });
 
@@ -621,7 +1231,7 @@ document.addEventListener('DOMContentLoaded', function () {
         btn.addEventListener('click', function () {
             var currentPane = btn.closest('.panss-tab-pane');
             var currentIndex = tabOrder.indexOf(currentPane.id);
-            
+
             var sectionMap = {
                 'tab-P': { code: 'P', name: 'Positive Scale' },
                 'tab-N': { code: 'N', name: 'Negative Scale' },
@@ -640,7 +1250,6 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             updateTabAccessibility();
-
             if (currentIndex !== -1 && currentIndex < tabOrder.length - 1) {
                 switchTab(tabOrder[currentIndex + 1]);
             }
@@ -651,54 +1260,88 @@ document.addEventListener('DOMContentLoaded', function () {
         btn.addEventListener('click', function () {
             var currentPane = btn.closest('.panss-tab-pane');
             var currentIndex = tabOrder.indexOf(currentPane.id);
-            if (currentIndex > 0) {
-                switchTab(tabOrder[currentIndex - 1]);
-            }
+            if (currentIndex > 0) switchTab(tabOrder[currentIndex - 1]);
         });
     });
 
     function updateTotals() {
         var totals = { P: 0, N: 0, G: 0 };
+        var counts = { P: 0, N: 0, G: 0 };
+        var maxCounts = { P: 7, N: 7, G: 16 };
+        var totalRated = 0;
+
         controls.forEach(function (control) {
+            var sec = control.dataset.section;
             var value = Number(control.value);
+            var tr = control.closest('tr');
             if (value >= 1 && value <= 7) {
-                totals[control.dataset.section] += value;
+                totals[sec] += value;
+                counts[sec]++;
+                totalRated++;
+                if (tr) tr.classList.add('is-rated');
+            } else {
+                if (tr) tr.classList.remove('is-rated');
             }
         });
+
         targets.P.textContent = String(totals.P);
         targets.N.textContent = String(totals.N);
         targets.G.textContent = String(totals.G);
+
         var composite = totals.P - totals.N;
-        document.getElementById('compositeTotal').textContent = composite > 0 ? '+' + composite : String(composite);
+        var compStr = composite > 0 ? '+' + composite : String(composite);
+        document.getElementById('compositeTotal').textContent = compStr;
+
+        // Update sticky bar & progress indicators
+        var stickyP = document.getElementById('stickyP');
+        var stickyN = document.getElementById('stickyN');
+        var stickyG = document.getElementById('stickyG');
+        var stickyComp = document.getElementById('stickyComp');
+        var overallRated = document.getElementById('overallRatedCount');
+
+        if (stickyP) stickyP.textContent = String(totals.P);
+        if (stickyN) stickyN.textContent = String(totals.N);
+        if (stickyG) stickyG.textContent = String(totals.G);
+        if (stickyComp) stickyComp.textContent = compStr;
+        if (overallRated) overallRated.textContent = String(totalRated);
+
+        ['P', 'N', 'G'].forEach(function (sec) {
+            var subEl = document.getElementById('stepSub' + sec);
+            if (subEl) subEl.textContent = counts[sec] + ' / ' + maxCounts[sec] + ' rated';
+            var fillEl = document.getElementById('progressFill_' + sec);
+            if (fillEl) fillEl.style.width = Math.round((counts[sec] / maxCounts[sec]) * 100) + '%';
+        });
     }
 
     controls.forEach(function (control) {
         control.addEventListener('change', function () {
             updateTotals();
             updateTabAccessibility();
-            if (control.value !== '') {
-                setRatingError(control, '');
-            }
+            if (control.value !== '') setRatingError(control, '');
         });
     });
 
     patientSelect.addEventListener('change', function () {
-        if (patientSelect.value !== '') {
-            setFieldError('patient_id', '');
-        }
+        if (patientSelect.value !== '') setFieldError('patient_id', '');
         updateTabAccessibility();
     });
     assessmentDate.addEventListener('change', function () {
-        if (assessmentDate.value !== '') {
-            setFieldError('assessment_date', '');
-        }
+        if (assessmentDate.value !== '') setFieldError('assessment_date', '');
         updateTabAccessibility();
     });
-    notesInput.addEventListener('input', function () {
-        if (notesInput.value.length <= 5000) {
-            setFieldError('clinical_notes', '');
+
+    function updateNotesCount() {
+        if (notesInput && notesCountEl) {
+            notesCountEl.textContent = notesInput.value.length.toLocaleString();
         }
-    });
+    }
+    if (notesInput) {
+        notesInput.addEventListener('input', function () {
+            updateNotesCount();
+            if (notesInput.value.length <= 5000) setFieldError('clinical_notes', '');
+        });
+        updateNotesCount();
+    }
 
     form.addEventListener('submit', function (event) {
         var hasErrors = false;
@@ -715,9 +1358,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (assessmentDate.value === '' || !assessmentDate.validity.valid) {
             setFieldError('assessment_date', 'Please enter a valid assessment date.');
             hasErrors = true;
-            if (!firstTopErrorControl) {
-                firstTopErrorControl = assessmentDate;
-            }
+            if (!firstTopErrorControl) firstTopErrorControl = assessmentDate;
         } else {
             setFieldError('assessment_date', '');
         }
@@ -728,15 +1369,13 @@ document.addEventListener('DOMContentLoaded', function () {
         } else {
             setFieldError('clinical_notes', '');
         }
-        
+
         var firstErrorControl = null;
         controls.forEach(function (control) {
             if (control.value === '') {
                 setRatingError(control, 'Please select a rating for this item.');
                 hasErrors = true;
-                if (!firstErrorControl) {
-                    firstErrorControl = control;
-                }
+                if (!firstErrorControl) firstErrorControl = control;
             } else {
                 setRatingError(control, '');
             }
@@ -753,10 +1392,8 @@ document.addEventListener('DOMContentLoaded', function () {
             if (firstErrorControl) {
                 showJsError('Please complete all required ratings before submitting.');
                 var pane = firstErrorControl.closest('.panss-tab-pane');
-                if (pane) {
-                    switchTab(pane.id);
-                }
-                window.setTimeout(function() {
+                if (pane) switchTab(pane.id);
+                window.setTimeout(function () {
                     firstErrorControl.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     firstErrorControl.focus();
                 }, 150);
@@ -768,5 +1405,4 @@ document.addEventListener('DOMContentLoaded', function () {
     updateTabAccessibility();
 });
 </script>
-
 <?php require 'layout/footer.php'; ?>

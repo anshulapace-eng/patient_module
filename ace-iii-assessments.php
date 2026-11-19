@@ -14,10 +14,28 @@ $is_patient = $current_role === 2;
 $show_score_inputs = $is_admin;
 $edit_record_id = isset($_GET['edit_id']) ? (int) $_GET['edit_id'] : 0;
 $existing_record = null;
+$error_msg = '';
+$success_msg = '';
 
 if (!isset($_SESSION['user_login']) || !in_array($current_role, [1, 2], true)) {
+    if (
+        $_SERVER['REQUEST_METHOD'] === 'POST' &&
+        (isset($_POST['autosave_ace_iii']) || strtolower($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'xmlhttprequest')
+    ) {
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+        header('Content-Type: application/json; charset=utf-8');
+        http_response_code(401);
+        echo json_encode(['ok' => false, 'message' => 'Session expired. Please login again.']);
+        exit;
+    }
     header('Location: login.php');
     exit;
+}
+
+if (!isset($_SESSION['ace_iii_csrf_token'])) {
+    $_SESSION['ace_iii_csrf_token'] = bin2hex(random_bytes(32));
 }
 
 if ($edit_record_id > 0) {
@@ -32,6 +50,7 @@ if ($edit_record_id > 0) {
             $existing_record = $existing_result->fetch_assoc();
             if (!$is_admin && (int) $existing_record['patient_id'] !== (int) ($_SESSION['user_id'] ?? 0)) {
                 $existing_record = null;
+                $edit_record_id = 0;
                 $error_msg = 'You do not have access to edit this record.';
             }
         }
@@ -115,13 +134,11 @@ $score_fields = [
 ];
 
 $patients = [];
-$error_msg = '';
-$success_msg = '';
 $submitted_scores = (isset($_POST['scores']) && is_array($_POST['scores'])) ? $_POST['scores'] : [];
 $raw_patient_id = isset($_POST['patient_id']) ? $_POST['patient_id'] : '';
 $patient_id = filter_var($raw_patient_id, FILTER_VALIDATE_INT);
 $patient_id = ($patient_id === false) ? 0 : (int) $patient_id;
-if ($patient_id < 1 && $is_patient) {
+if ($is_patient) {
     $patient_id = (int) ($_SESSION['user_id'] ?? 0);
 }
 $date_input = isset($_POST['assessment_date']) ? $_POST['assessment_date'] : date('Y-m-d');
@@ -129,6 +146,248 @@ $form_date = is_string($date_input) ? $date_input : date('Y-m-d');
 $details = (isset($_POST['patient_details']) && is_array($_POST['patient_details'])) ? $_POST['patient_details'] : [];
 $answers = (isset($_POST['answers']) && is_array($_POST['answers'])) ? $_POST['answers'] : [];
 $notes = (isset($_POST['clinical_notes']) && is_string($_POST['clinical_notes'])) ? trim($_POST['clinical_notes']) : '';
+
+/* =========================================================
+   AJAX AUTOSAVE ENDPOINT (MUST RUN BEFORE ANY HTML OUTPUT)
+   ========================================================= */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['autosave_ace_iii'])) {
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    header('Content-Type: application/json; charset=utf-8');
+
+    if (!$ace_iii_schema_ready) {
+        http_response_code(503);
+        echo json_encode(['ok' => false, 'message' => 'Assessment table is not ready.']);
+        exit;
+    }
+
+    $posted_token = isset($_POST['csrf_token']) ? $_POST['csrf_token'] : '';
+    if (!is_string($posted_token) || !hash_equals($_SESSION['ace_iii_csrf_token'], $posted_token)) {
+        http_response_code(419);
+        echo json_encode(['ok' => false, 'message' => 'Form session expired. Reload the page.']);
+        exit;
+    }
+
+    if ($patient_id < 1) {
+        http_response_code(422);
+        echo json_encode(['ok' => false, 'message' => 'Select a patient before autosave.']);
+        exit;
+    }
+
+    // Validate patient exists
+    $patient_check = $conn->prepare(
+        'SELECT id FROM users WHERE id = ? AND role_id = 2 AND patient_id = ' . PATIENT_SCOPE_ID . ' LIMIT 1'
+    );
+    if (!$patient_check) {
+        http_response_code(500);
+        echo json_encode(['ok' => false, 'message' => 'Could not verify patient.']);
+        exit;
+    }
+    $patient_check->bind_param('i', $patient_id);
+    $patient_check->execute();
+    $patient_check->store_result();
+    $patient_exists = $patient_check->num_rows === 1;
+    $patient_check->close();
+    if (!$patient_exists) {
+        http_response_code(422);
+        echo json_encode(['ok' => false, 'message' => 'Selected patient not found.']);
+        exit;
+    }
+
+    // Ensure valid date for SQL
+    $safe_date = date('Y-m-d');
+    if (is_string($form_date) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $form_date)) {
+        [$y, $m, $d] = array_map('intval', explode('-', $form_date));
+        if (checkdate($m, $d, $y)) {
+            $safe_date = $form_date;
+        }
+    }
+
+    // Truncate notes safely for draft
+    $draft_notes = mb_substr($notes, 0, 5000);
+
+    // Sanitize answers/details slightly so invalid non-string inputs don't break JSON
+    $draft_answers = [];
+    foreach ($answers as $k => $v) {
+        if (!is_string($v)) {
+            continue;
+        }
+        $is_drawing = strpos((string) $k, 'drawing_') === 0;
+        if ($is_drawing) {
+            if ($v === '' || (strlen($v) <= 500000 && preg_match('/^data:image\/png;base64,[A-Za-z0-9+\/=]+$/', $v))) {
+                $draft_answers[$k] = $v;
+            }
+        } else {
+            $draft_answers[$k] = mb_substr($v, 0, 5000);
+        }
+    }
+
+    $draft_scores = [];
+    $draft_totals = [
+        'attention' => 0,
+        'memory' => 0,
+        'fluency' => 0,
+        'language' => 0,
+        'visuospatial' => 0,
+    ];
+
+    if ($is_admin) {
+        foreach ($score_fields as $section => $fields) {
+            foreach ($fields as $field => $maximum) {
+                $raw_score = $submitted_scores[$field] ?? null;
+                $score = (is_string($raw_score) || is_int($raw_score))
+                    ? filter_var($raw_score, FILTER_VALIDATE_INT)
+                    : false;
+                if ($score !== false && $score >= 0 && $score <= $maximum) {
+                    $draft_scores[$field] = (int) $score;
+                    $draft_totals[$section] += (int) $score;
+                }
+            }
+        }
+    }
+
+    $draft_demographics = assessment_demographics_normalize($_POST['demographics'] ?? []);
+    $draft_demographics['date'] = $draft_demographics['date'] ?: $safe_date;
+    $draft_details = [];
+    foreach ($details as $k => $v) {
+        if (is_string($v)) {
+            $draft_details[$k] = mb_substr($v, 0, 5000);
+        }
+    }
+    $draft_details['_demographics'] = $draft_demographics;
+
+    $draft_details_json = json_encode($draft_details, JSON_UNESCAPED_UNICODE);
+    $draft_response_json = json_encode(['answers' => $draft_answers, 'scores' => $draft_scores], JSON_UNESCAPED_UNICODE);
+    $draft_demographic_json = json_encode($draft_demographics, JSON_UNESCAPED_UNICODE);
+
+    if ($draft_details_json === false || $draft_response_json === false || $draft_demographic_json === false) {
+        http_response_code(422);
+        echo json_encode(['ok' => false, 'message' => 'Unable to prepare draft data.']);
+        exit;
+    }
+
+    $draft_total = array_sum($draft_totals);
+    $draft_clinician = $is_admin ? (int) ($_SESSION['user_id'] ?? 0) : 0;
+    $draft_id_input = $_POST['draft_record_id'] ?? 0;
+    $draft_id = filter_var($draft_id_input, FILTER_VALIDATE_INT);
+    $draft_id = ($draft_id === false || $draft_id < 1) ? 0 : (int) $draft_id;
+    $draft_status = 'Draft';
+
+    // Verify existing draft ownership & preserve non-draft status if editing a saved record
+    if ($draft_id > 0) {
+        $check_draft = $conn->prepare('SELECT patient_id, status FROM ace_iii_assessments WHERE id = ? LIMIT 1');
+        if ($check_draft) {
+            $check_draft->bind_param('i', $draft_id);
+            $check_draft->execute();
+            $check_res = $check_draft->get_result();
+            if ($check_res && $check_res->num_rows === 1) {
+                $existing_row = $check_res->fetch_assoc();
+                if ($is_patient && (int) $existing_row['patient_id'] !== (int) ($_SESSION['user_id'] ?? 0)) {
+                    $check_draft->close();
+                    http_response_code(403);
+                    echo json_encode(['ok' => false, 'message' => 'Unauthorized draft access.']);
+                    exit;
+                }
+                if (!empty($existing_row['status']) && $existing_row['status'] !== 'Draft') {
+                    $draft_status = (string) $existing_row['status'];
+                }
+            } else {
+                $draft_id = 0; // Record no longer exists; insert new draft
+            }
+            $check_draft->close();
+        }
+    }
+
+    if ($draft_id > 0) {
+        $draft_stmt = $conn->prepare(
+            'UPDATE ace_iii_assessments
+             SET patient_id = ?, clinician_id = ?, assessment_date = ?, total_score = ?, attention_score = ?,
+                 memory_score = ?, fluency_score = ?, language_score = ?, visuospatial_score = ?,
+                 patient_details = ?, response_data = ?, clinical_notes = ?, status = ?, demographic_data = ?
+             WHERE id = ? LIMIT 1'
+        );
+        if (!$draft_stmt) {
+            error_log('ACE-III draft autosave update prepare failed: ' . $conn->error);
+            http_response_code(500);
+            echo json_encode(['ok' => false, 'message' => 'Draft update could not be prepared.']);
+            exit;
+        }
+        $draft_types = 'iis' . str_repeat('i', 6) . str_repeat('s', 5) . 'i';
+        $draft_params = [
+            $patient_id,
+            $draft_clinician,
+            $safe_date,
+            $draft_total,
+            $draft_totals['attention'],
+            $draft_totals['memory'],
+            $draft_totals['fluency'],
+            $draft_totals['language'],
+            $draft_totals['visuospatial'],
+            $draft_details_json,
+            $draft_response_json,
+            $draft_notes,
+            $draft_status,
+            $draft_demographic_json,
+            $draft_id,
+        ];
+        $draft_stmt->bind_param($draft_types, ...$draft_params);
+    } else {
+        $draft_stmt = $conn->prepare(
+            'INSERT INTO ace_iii_assessments
+                (patient_id, clinician_id, assessment_date, total_score, attention_score,
+                 memory_score, fluency_score, language_score, visuospatial_score,
+                 patient_details, response_data, clinical_notes, status, demographic_data)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        );
+        if (!$draft_stmt) {
+            error_log('ACE-III draft autosave insert prepare failed: ' . $conn->error);
+            http_response_code(500);
+            echo json_encode(['ok' => false, 'message' => 'Draft save could not be prepared.']);
+            exit;
+        }
+        $draft_types = 'iis' . str_repeat('i', 6) . str_repeat('s', 5);
+        $draft_params = [
+            $patient_id,
+            $draft_clinician,
+            $safe_date,
+            $draft_total,
+            $draft_totals['attention'],
+            $draft_totals['memory'],
+            $draft_totals['fluency'],
+            $draft_totals['language'],
+            $draft_totals['visuospatial'],
+            $draft_details_json,
+            $draft_response_json,
+            $draft_notes,
+            $draft_status,
+            $draft_demographic_json,
+        ];
+        $draft_stmt->bind_param($draft_types, ...$draft_params);
+    }
+
+    if (!$draft_stmt->execute()) {
+        $draft_error = $draft_stmt->error;
+        $draft_stmt->close();
+        error_log('ACE-III draft autosave failed: ' . $draft_error);
+        http_response_code(500);
+        echo json_encode(['ok' => false, 'message' => 'Draft could not be saved.']);
+        exit;
+    }
+
+    if ($draft_id < 1) {
+        $draft_id = (int) $draft_stmt->insert_id;
+    }
+    $draft_stmt->close();
+
+    echo json_encode([
+        'ok' => true,
+        'draft_id' => $draft_id,
+        'status' => $draft_status,
+        'saved_at' => date('H:i:s'),
+    ]);
+    exit;
+}
 
 if ($existing_record && empty($_POST)) {
     $patient_id = (int) $existing_record['patient_id'];
@@ -141,11 +400,6 @@ if ($existing_record && empty($_POST)) {
     $answers = is_array($response_payload['answers'] ?? null) ? $response_payload['answers'] : [];
     $submitted_scores = is_array($response_payload['scores'] ?? null) ? $response_payload['scores'] : [];
     $notes = (string) $existing_record['clinical_notes'];
-    $show_score_inputs = $is_admin || $is_patient;
-}
-
-if (!isset($_SESSION['ace_iii_csrf_token'])) {
-    $_SESSION['ace_iii_csrf_token'] = bin2hex(random_bytes(32));
 }
 
 if (!$ace_iii_schema_ready) {
@@ -193,6 +447,9 @@ if ($ace_filled_by === '') {
     $ace_filled_by = 'Clinician';
 }
 
+/* =========================================================
+   FINAL FORM SUBMIT HANDLER
+   ========================================================= */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_ace_iii']) && $ace_iii_schema_ready) {
     $posted_token = isset($_POST['csrf_token']) ? $_POST['csrf_token'] : '';
     if (!is_string($posted_token) || !hash_equals($_SESSION['ace_iii_csrf_token'], $posted_token)) {
@@ -244,8 +501,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_ace_iii']) && 
 
     foreach ([$details, $answers] as $posted_data) {
         foreach ($posted_data as $key => $value) {
-            $max_length = strpos((string) $key, 'drawing_') === 0 ? 500000 : 5000;
             $is_drawing = strpos((string) $key, 'drawing_') === 0;
+            $max_length = $is_drawing ? 500000 : 5000;
             if (
                 !is_string($value) || strlen($value) > $max_length ||
                 ($is_drawing && $value !== '' && !preg_match('/^data:image\/png;base64,[A-Za-z0-9+\/=]+$/', $value))
@@ -290,25 +547,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_ace_iii']) && 
             ['answers' => $answers, 'scores' => $scores],
             JSON_UNESCAPED_UNICODE
         );
-        if ($patient_details_json === false || $response_data_json === false) {
+
+        if ($patient_details_json === false || $response_data_json === false || $demographic_json === false) {
             $error_msg = 'The assessment responses could not be prepared for saving.';
         } else {
             $current_user_id = (int) ($_SESSION['user_id'] ?? 0);
             $status_value = $show_score_inputs ? 'Success' : 'Pending';
             $clinician_id = $show_score_inputs ? $current_user_id : 0;
 
-            if ($edit_record_id > 0 && $existing_record) {
+            // Check if updating an existing record OR upgrading an autosaved draft
+            $posted_draft_id = filter_var($_POST['draft_record_id'] ?? 0, FILTER_VALIDATE_INT);
+            $posted_draft_id = ($posted_draft_id === false || $posted_draft_id < 1) ? 0 : (int) $posted_draft_id;
+            $target_record_id = ($edit_record_id > 0 && $existing_record) ? $edit_record_id : $posted_draft_id;
+
+            if ($target_record_id > 0 && !$existing_record) {
+                $verify_stmt = $conn->prepare('SELECT patient_id FROM ace_iii_assessments WHERE id = ? LIMIT 1');
+                if ($verify_stmt) {
+                    $verify_stmt->bind_param('i', $target_record_id);
+                    $verify_stmt->execute();
+                    $verify_res = $verify_stmt->get_result();
+                    if ($verify_res && $verify_res->num_rows === 1) {
+                        $row = $verify_res->fetch_assoc();
+                        if ($is_patient && (int) $row['patient_id'] !== $current_user_id) {
+                            $target_record_id = 0;
+                        }
+                    } else {
+                        $target_record_id = 0;
+                    }
+                    $verify_stmt->close();
+                } else {
+                    $target_record_id = 0;
+                }
+            }
+
+            if ($target_record_id > 0) {
                 $update = $conn->prepare(
                     'UPDATE ace_iii_assessments
                      SET patient_id = ?, clinician_id = ?, assessment_date = ?, total_score = ?, attention_score = ?,
                          memory_score = ?, fluency_score = ?, language_score = ?, visuospatial_score = ?,
                          patient_details = ?, response_data = ?, clinical_notes = ?, status = ?, demographic_data = ?
-                     WHERE id = ?'
+                     WHERE id = ? LIMIT 1'
                 );
                 if (!$update) {
                     error_log('ACE-III update prepare failed: ' . $conn->error);
                     $error_msg = 'The assessment could not be updated. Please try again.';
                 } else {
+                    $update_types = 'iis' . str_repeat('i', 6) . str_repeat('s', 5) . 'i';
                     $update_params = [
                         $patient_id,
                         $clinician_id,
@@ -324,15 +608,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_ace_iii']) && 
                         $notes,
                         $status_value,
                         $demographic_json,
-                        $edit_record_id,
+                        $target_record_id,
                     ];
-                    $update_types = 'iis' . str_repeat('i', 6) . str_repeat('s', 5) . 'i';
-                    array_unshift($update_params, $update_types);
-                    call_user_func_array([$update, 'bind_param'], $update_params);
+                    $update->bind_param($update_types, ...$update_params);
                     if ($update->execute()) {
                         $update->close();
                         $_SESSION['ace_iii_csrf_token'] = bin2hex(random_bytes(32));
-                        $_SESSION['ace_iii_saved'] = 'ACE-III assessment updated successfully.';
+                        $_SESSION['ace_iii_saved'] = ($edit_record_id > 0)
+                            ? 'ACE-III assessment updated successfully.'
+                            : 'ACE-III assessment saved successfully.';
                         header('Location: ace-iii-assessment-records.php');
                         exit;
                     }
@@ -352,6 +636,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_ace_iii']) && 
                     error_log('ACE-III insert prepare failed: ' . $conn->error);
                     $error_msg = 'The assessment could not be saved. Please try again.';
                 } else {
+                    $insert_types = 'iis' . str_repeat('i', 6) . str_repeat('s', 5);
                     $insert_params = [
                         $patient_id,
                         $clinician_id,
@@ -368,9 +653,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_ace_iii']) && 
                         $status_value,
                         $demographic_json,
                     ];
-                    $insert_types = 'iis' . str_repeat('i', 6) . str_repeat('s', 5);
-                    array_unshift($insert_params, $insert_types);
-                    call_user_func_array([$insert, 'bind_param'], $insert_params);
+                    $insert->bind_param($insert_types, ...$insert_params);
                     if ($insert->execute()) {
                         $insert->close();
                         $_SESSION['ace_iii_csrf_token'] = bin2hex(random_bytes(32));
@@ -414,7 +697,6 @@ function ace_iii_score_input($field, $maximum, $submitted_scores, $domain_label 
 
 function ace_iii_get_picture_svg($index)
 {
-    // Agar aapke paas real image file (assets/ace-iii/pic_1.png ... pic_12.png) ho, to wo automatically dikhegi:
     foreach (['png', 'jpg', 'jpeg', 'webp'] as $ext) {
         $relative_path = 'assets/ace-iii/pic_' . (int) $index . '.' . $ext;
         if (file_exists(__DIR__ . '/' . $relative_path)) {
@@ -422,9 +704,7 @@ function ace_iii_get_picture_svg($index)
         }
     }
 
-    // High-Detail Realistic Clinical Illustrations (Exact ACE-III Indian English Paper Sheet Match)
     $svgs = [
-        // 1. Thick Hardcover Book with Pages & Spine
         1 => '<svg viewBox="0 0 160 120" class="ace-detailed-svg">
             <path d="M38 22 L114 15 L122 21 L48 28 Z" fill="#f1f5f9"/>
             <path d="M38 22 L114 15 M42 25 L118 18 M48 28 L122 21" stroke-width="1.3"/>
@@ -434,15 +714,11 @@ function ace_iii_get_picture_svg($index)
             <line x1="56" y1="27" x2="56" y2="99" stroke-width="1.5"/>
             <line x1="114" y1="15" x2="114" y2="21"/>
         </svg>',
-
-        // 2. Realistic Metallic Spoon (3D Bowl & Contoured Handle)
         2 => '<svg viewBox="0 0 160 120" class="ace-detailed-svg">
             <path d="M102 22 C118 14 136 18 134 30 C132 42 112 48 96 42 C90 40 86 38 80 42 L32 82 C26 87 20 82 25 76 L75 36 C82 31 92 27 102 22 Z" fill="#f8fafc"/>
             <ellipse cx="114" cy="31" rx="16" ry="9" transform="rotate(-22 114 31)" stroke-width="1.2" fill="#e2e8f0"/>
             <path d="M98 28 C108 22 122 22 126 27" stroke-width="1" opacity="0.6"/>
         </svg>',
-
-        // 3. Detailed Indian Goat (Horns, Drooping Ears, Beard, Hooves)
         3 => '<svg viewBox="0 0 160 120" class="ace-detailed-svg">
             <path d="M38 56 C52 52 78 52 94 55 L108 32 L118 32 L126 42 L116 46 L112 44 L104 62 C106 70 102 76 96 78 L98 102 L93 102 L90 78 C76 80 58 78 48 75 L42 102 L37 102 L41 74 L33 100 L28 100 L34 68 C32 62 34 58 38 56 Z" fill="#ffffff"/>
             <path d="M96 78 L103 101 L98 102" fill="none"/>
@@ -453,8 +729,6 @@ function ace_iii_get_picture_svg($index)
             <path d="M120 45 L122 53 L118 51" fill="none"/>
             <circle cx="116" cy="37" r="1.5" fill="#0f172a"/>
         </svg>',
-
-        // 4. Lit Wax Candle with Melted Rim & Layered Flame
         4 => '<svg viewBox="0 0 160 120" class="ace-detailed-svg">
             <path d="M62 46 L62 100 C62 104 98 104 98 100 L98 46" fill="#ffffff"/>
             <ellipse cx="80" cy="46" rx="18" ry="5" fill="#f1f5f9"/>
@@ -463,8 +737,6 @@ function ace_iii_get_picture_svg($index)
             <path d="M80 12 C71 23 70 34 80 38 C90 34 89 23 80 12 Z" fill="#fef08a"/>
             <path d="M80 20 C76 26 76 33 80 36 C84 33 84 26 80 20 Z" fill="#fde047" stroke-width="1"/>
         </svg>',
-
-        // 5. Indian Flag on Pole with 24-Spoke Ashoka Chakra & Waving Fold
         5 => '<svg viewBox="0 0 160 120" class="ace-detailed-svg">
             <rect x="34" y="14" width="4" height="94" rx="1.5" fill="#cbd5e1"/>
             <circle cx="36" cy="13" r="3" fill="#94a3b8"/>
@@ -479,29 +751,22 @@ function ace_iii_get_picture_svg($index)
             <line x1="62.5" y1="38.5" x2="71.5" y2="47.5" stroke-width="1"/>
             <line x1="71.5" y1="38.5" x2="62.5" y2="47.5" stroke-width="1"/>
         </svg>',
-
-        // 6. Realistic Dromedary Camel (Hump, Long Curved Neck, Tail, Jointed Legs)
         6 => '<svg viewBox="0 0 160 120" class="ace-detailed-svg">
             <path d="M38 58 C42 30 68 28 78 48 C84 54 90 54 96 42 C100 32 102 22 108 20 L120 20 C123 22 122 26 116 27 L110 28 C106 38 104 52 98 62 C96 68 94 72 90 74 L90 102 L85 102 L84 76 L78 102 L73 102 L76 74 C64 76 54 74 48 72 L44 102 L39 102 L42 74 L35 104 L30 104 L34 68 C32 62 34 58 38 56 Z" fill="#ffffff"/>
             <path d="M38 58 L30 74 L33 76 L37 64" fill="#e2e8f0"/>
             <circle cx="113" cy="23" r="1.4" fill="#0f172a"/>
             <path d="M107 20 L105 16 L109 18" fill="none"/>
         </svg>',
-
-        // 7. Curved Agricultural Sickle (Hasia) with Wooden Handle & Ferrule
         7 => '<svg viewBox="0 0 160 120" class="ace-detailed-svg">
             <path d="M26 88 L56 66 C60 63 64 67 60 71 L32 95 C27 98 22 92 26 88 Z" fill="#e2e8f0"/>
             <path d="M55 65 L62 60 L66 65 L59 70 Z" fill="#94a3b8"/>
             <path d="M64 61 C82 48 118 48 114 22 C112 12 100 10 92 14 C104 16 106 26 98 36 C90 46 74 48 61 59 Z" fill="#f8fafc"/>
         </svg>',
-
-        // 8. Spotted Giraffe (Long Patterned Neck, Ossicones/Horns, Hooves)
         8 => '<svg viewBox="0 0 160 120" class="ace-detailed-svg">
             <path d="M44 64 L72 54 L98 14 L108 14 L114 19 L106 22 L102 21 L84 58 C86 64 84 70 80 73 L82 104 L77 104 L75 74 L70 104 L65 104 L68 74 C58 75 52 74 48 72 L44 104 L39 104 L42 74 L35 104 L30 104 L38 68 C38 66 40 65 44 64 Z" fill="#ffffff"/>
             <line x1="101" y1="14" x2="100" y2="9"/><circle cx="100" cy="8" r="1.5" fill="#0f172a"/>
             <line x1="105" y1="14" x2="105" y2="9"/><circle cx="105" cy="8" r="1.5" fill="#0f172a"/>
             <path d="M38 68 L31 84" stroke-width="1.5"/>
-            <!-- Giraffe Polygon Spots -->
             <polygon points="88,28 93,26 92,32 87,33" fill="#94a3b8" stroke="none"/>
             <polygon points="82,38 87,36 86,43 80,42" fill="#94a3b8" stroke="none"/>
             <polygon points="75,49 81,48 80,55 74,54" fill="#94a3b8" stroke="none"/>
@@ -510,22 +775,17 @@ function ace_iii_get_picture_svg($index)
             <polygon points="49,64 57,62 57,69 49,69" fill="#94a3b8" stroke="none"/>
             <polygon points="58,68 65,67 64,72 57,72" fill="#94a3b8" stroke="none"/>
         </svg>',
-
-        // 9. Traditional Kettle Drum (Nagada) with Zigzag Lacing & 2 Drumsticks
         9 => '<svg viewBox="0 0 160 120" class="ace-detailed-svg">
             <path d="M36 48 C38 86 58 98 80 98 C102 98 122 86 124 48" fill="#f8fafc"/>
             <ellipse cx="80" cy="48" rx="44" ry="12" fill="#ffffff"/>
             <ellipse cx="80" cy="48" rx="37" ry="9" stroke-width="1.2" fill="#f1f5f9"/>
             <path d="M38 53 L48 84 L58 57 L68 93 L80 59 L92 93 L102 57 L112 84 L122 53" stroke-width="1.6"/>
             <path d="M43 74 Q80 84 117 74" stroke-width="1.5"/>
-            <!-- Drumsticks -->
             <line x1="62" y1="36" x2="106" y2="20" stroke-width="2.8"/>
             <circle cx="61" cy="36" r="3" fill="#0f172a"/>
             <line x1="72" y1="43" x2="116" y2="27" stroke-width="2.8"/>
             <circle cx="71" cy="43" r="3" fill="#0f172a"/>
         </svg>',
-
-        // 10. Open Ribbed Umbrella with Curved J-Handle
         10 => '<svg viewBox="0 0 160 120" class="ace-detailed-svg">
             <path d="M26 58 C32 20 96 12 118 46 Z" fill="#f8fafc"/>
             <path d="M26 58 Q41 50 56 54 Q72 46 88 51 Q103 43 118 46" fill="#ffffff"/>
@@ -533,8 +793,6 @@ function ace_iii_get_picture_svg($index)
             <line x1="66" y1="16" x2="68" y2="23" stroke-width="2.5"/>
             <path d="M72 49 L92 92 C95 99 85 104 81 97 L79 93" stroke-width="2.6"/>
         </svg>',
-
-        // 11. Realistic Pig (Snout, Floppy Ears, Curly Tail, Trotters)
         11 => '<svg viewBox="0 0 160 120" class="ace-detailed-svg">
             <path d="M44 52 C54 36 94 34 114 46 C124 52 124 68 112 74 L110 96 L104 96 L104 76 C92 80 72 80 60 76 L56 96 L50 96 L52 74 L44 94 L38 94 L44 70 C36 68 32 64 26 64 L24 56 L34 54 C36 50 40 48 44 52 Z" fill="#ffffff"/>
             <ellipse cx="25" cy="60" rx="2.5" ry="4" fill="#e2e8f0"/>
@@ -543,17 +801,12 @@ function ace_iii_get_picture_svg($index)
             <path d="M121 54 C130 48 134 56 126 58 C132 60 132 66 125 65" fill="none" stroke-width="1.8"/>
             <line x1="96" y1="78" x2="94" y2="94" stroke-width="2"/>
         </svg>',
-
-        // 12. Textured Crocodile with Open Toothed Jaws, Ridged Back & Scaled Tail
         12 => '<svg viewBox="0 0 160 120" class="ace-detailed-svg">
             <path d="M12 66 C22 76 42 74 62 66 L112 62 L146 52 L124 63 L146 65 L114 71 L64 76 C40 82 20 80 12 66 Z" fill="#f8fafc"/>
-            <!-- Teeth -->
             <polyline points="126,58 128,60 131,57 133,59 136,56 139,58 142,55" stroke-width="1.1"/>
             <polyline points="126,65 129,63 132,65 135,63 138,65 141,63" stroke-width="1.1"/>
-            <!-- Legs -->
             <path d="M68 75 L62 88 L70 88 L74 75" fill="#e2e8f0"/>
             <path d="M102 71 L98 86 L106 86 L108 71" fill="#e2e8f0"/>
-            <!-- Dorsal Ridges & Scales -->
             <path d="M24 69 L28 65 L32 68 L36 64 L40 67 L45 63 L50 66 L55 62 L60 66" stroke-width="1.3"/>
             <line x1="65" y1="68" x2="108" y2="65" stroke-dasharray="4,3" stroke-width="1.3"/>
             <circle cx="116" cy="59" r="1.5" fill="#0f172a"/>
@@ -565,26 +818,22 @@ function ace_iii_get_picture_svg($index)
 function ace_iii_get_fragmented_letter_svg($index)
 {
     $letters = [
-        // 1. Fragmented K
         1 => '<svg viewBox="0 0 120 120" class="ace-frag-svg"><g fill="#0f172a">
             <rect x="28" y="18" width="8" height="14"/><rect x="28" y="42" width="8" height="16"/><rect x="28" y="68" width="8" height="12"/><rect x="28" y="90" width="8" height="12"/>
             <rect x="78" y="20" width="9" height="9" transform="rotate(25 78 20)"/><rect x="62" y="36" width="10" height="8" transform="rotate(-35 62 36)"/><rect x="46" y="50" width="9" height="8"/>
             <rect x="54" y="64" width="10" height="8" transform="rotate(35 54 64)"/><rect x="68" y="78" width="10" height="8" transform="rotate(35 68 78)"/><rect x="82" y="92" width="10" height="9"/>
         </g></svg>',
-        // 2. Fragmented M
         2 => '<svg viewBox="0 0 120 120" class="ace-frag-svg"><g fill="#0f172a">
             <rect x="20" y="20" width="8" height="14"/><rect x="20" y="46" width="8" height="14"/><rect x="20" y="72" width="8" height="12"/><rect x="20" y="92" width="8" height="10"/>
             <rect x="32" y="28" width="8" height="12" transform="rotate(-28 32 28)"/><rect x="44" y="48" width="8" height="12" transform="rotate(-25 44 48)"/><rect x="56" y="66" width="8" height="10"/>
             <rect x="68" y="48" width="8" height="12" transform="rotate(25 68 48)"/><rect x="78" y="28" width="8" height="12" transform="rotate(28 78 28)"/>
             <rect x="92" y="20" width="8" height="14"/><rect x="92" y="48" width="8" height="14"/><rect x="92" y="74" width="8" height="12"/><rect x="92" y="92" width="8" height="10"/>
         </g></svg>',
-        // 3. Fragmented A
         3 => '<svg viewBox="0 0 120 120" class="ace-frag-svg"><g fill="#0f172a">
             <rect x="56" y="18" width="9" height="10"/><rect x="46" y="36" width="8" height="14" transform="rotate(20 46 36)"/><rect x="36" y="60" width="8" height="14" transform="rotate(20 36 60)"/><rect x="26" y="86" width="8" height="14" transform="rotate(20 26 86)"/>
             <rect x="68" y="36" width="8" height="14" transform="rotate(-20 68 36)"/><rect x="78" y="60" width="8" height="14" transform="rotate(-20 78 60)"/><rect x="88" y="86" width="8" height="14" transform="rotate(-20 88 86)"/>
             <rect x="44" y="66" width="12" height="7"/><rect x="64" y="66" width="12" height="7"/>
         </g></svg>',
-        // 4. Fragmented T
         4 => '<svg viewBox="0 0 120 120" class="ace-frag-svg"><g fill="#0f172a">
             <rect x="22" y="20" width="14" height="8"/><rect x="46" y="20" width="12" height="8"/><rect x="68" y="20" width="12" height="8"/><rect x="88" y="20" width="12" height="8"/>
             <rect x="56" y="34" width="8" height="14"/><rect x="56" y="58" width="8" height="14"/><rect x="56" y="80" width="8" height="10"/><rect x="56" y="96" width="8" height="8"/>
@@ -622,7 +871,6 @@ require 'layout/base.php';
         display: none !important;
     }
 
-    /* Soft Shadow Header Banner */
     .ace-sheet-banner {
         background: #fff;
         border: 1px solid var(--ace-border);
@@ -638,7 +886,7 @@ require 'layout/base.php';
     }
     .ace-sheet-banner h1 {
         margin: 0;
-        font-size: 20px;
+        font-size: 25px;
         font-weight: 800;
         letter-spacing: 0.2px;
         color: #0f172a;
@@ -646,7 +894,7 @@ require 'layout/base.php';
     }
     .ace-sheet-banner h2 {
         margin: 4px 0 0;
-        font-size: 14px;
+        font-size: 16.5px;
         font-weight: 600;
         color: #64748b;
     }
@@ -654,12 +902,12 @@ require 'layout/base.php';
         display: inline-flex;
         align-items: center;
         gap: 6px;
-        padding: 9px 16px;
+        padding: 10px 18px;
         border: 1px solid #cbd5e1;
         border-radius: 8px;
         background: #fff;
         color: #334155;
-        font-size: 12.5px;
+        font-size: 14.5px;
         font-weight: 700;
         text-decoration: none;
         box-shadow: var(--ace-shadow-sm);
@@ -671,7 +919,6 @@ require 'layout/base.php';
         color: #fff;
     }
 
-    /* Section Card with Soft Shadow Instead of Dark Borders */
     .ace-paper-box {
         background: #fff;
         border: 1px solid rgba(226, 232, 240, 0.85);
@@ -684,8 +931,8 @@ require 'layout/base.php';
         background: linear-gradient(to right, #f8fafc, #f1f5f9);
         border-bottom: 1px solid var(--ace-border);
         border-left: 4px solid var(--ace-primary);
-        padding: 11px 18px;
-        font-size: 13px;
+        padding: 13px 20px;
+        font-size: 15.5px;
         font-weight: 800;
         letter-spacing: 0.5px;
         color: #0f172a;
@@ -698,13 +945,12 @@ require 'layout/base.php';
         background: var(--ace-primary-soft);
         color: var(--ace-primary);
         border: 1px solid #99f6e4;
-        padding: 4px 12px;
+        padding: 5px 14px;
         border-radius: 999px;
-        font-size: 12px;
+        font-size: 14px;
         font-weight: 700;
     }
 
-    /* Demographics 2-Column Grid */
     .ace-demo-grid {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -726,16 +972,23 @@ require 'layout/base.php';
         margin-bottom: 0;
     }
     .ace-demo-row label {
-        font-size: 12.5px;
+        font-size: 15px;
         font-weight: 600;
         color: #334155;
         margin: 0;
     }
 
-    /* Split Task Row: Soft Divider + Shadow Score Area */
+    .ace-page .form-control,
+    .ace-page .form-select,
+    .ace-page .form-control-sm,
+    .ace-page .form-select-sm {
+        font-size: 15px !important;
+        padding: 7px 11px;
+    }
+
     .ace-split-row {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) 160px;
+        grid-template-columns: minmax(0, 1fr) 175px;
         border-bottom: 1px solid var(--ace-soft-border);
     }
     .ace-split-row:last-child {
@@ -744,6 +997,20 @@ require 'layout/base.php';
     .ace-split-left {
         padding: 18px 20px;
         border-right: 1px solid var(--ace-soft-border);
+    }
+    .ace-split-left p,
+    .ace-split-left label,
+    .ace-split-left > div.fw-bold,
+    .ace-split-left .d-flex > span,
+    .ace-split-left .col-md-4.fw-bold {
+        font-size: 15.5px !important;
+        line-height: 1.55;
+    }
+    .ace-split-left .text-muted {
+        font-size: 14px !important;
+    }
+    .ace-split-left .text-center.fw-bold {
+        font-size: 22px !important;
     }
     .ace-split-right {
         padding: 16px 12px;
@@ -755,7 +1022,6 @@ require 'layout/base.php';
         gap: 10px;
     }
 
-    /* Score Box Styling (Elevated Pill Card) */
     .ace-score-box {
         width: 100%;
         text-align: center;
@@ -773,24 +1039,24 @@ require 'layout/base.php';
     }
     .ace-score-title {
         display: block;
-        font-size: 11px;
+        font-size: 13px;
         font-weight: 800;
         color: var(--ace-primary);
         text-transform: uppercase;
     }
     .ace-score-range {
         display: block;
-        font-size: 11px;
+        font-size: 13px;
         font-weight: 500;
         color: #64748b;
     }
     .ace-score {
-        width: 72px !important;
-        height: 36px !important;
+        width: 82px !important;
+        height: 42px !important;
         margin: 0 auto;
         text-align: center;
         font-weight: 800 !important;
-        font-size: 15px !important;
+        font-size: 18px !important;
         border: 1px solid #cbd5e1 !important;
         border-radius: 7px !important;
         background: #f8fafc !important;
@@ -802,19 +1068,17 @@ require 'layout/base.php';
         box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.14) !important;
     }
 
-    /* Bullet Prompts */
     .ace-bullet-list {
         margin: 0 0 12px;
         padding-left: 18px;
-        font-size: 13px;
-        line-height: 1.55;
+        font-size: 15.5px;
+        line-height: 1.6;
         color: #334155;
     }
     .ace-bullet-list li {
-        margin-bottom: 5px;
+        margin-bottom: 6px;
     }
 
-    /* Orientation 5-Box Row Table */
     .ace-orient-table {
         width: 100%;
         border-collapse: separate;
@@ -841,7 +1105,7 @@ require 'layout/base.php';
     }
     .ace-orient-table th {
         background: #f8fafc;
-        font-size: 12px;
+        font-size: 14px;
         font-weight: 700;
         color: #475569;
     }
@@ -853,25 +1117,25 @@ require 'layout/base.php';
         margin-top: 8px;
         padding-top: 8px;
         border-top: 1px dashed #e2e8f0;
-        font-size: 11px;
+        font-size: 13px;
         font-weight: 600;
         color: #64748b;
     }
     .ace-inline-score input {
-        width: 54px !important;
-        height: 30px !important;
+        width: 62px !important;
+        height: 36px !important;
         padding: 2px 4px !important;
         text-align: center;
+        font-size: 16px !important;
         font-weight: 800;
         border: 1px solid #cbd5e1;
         border-radius: 6px;
     }
 
-    /* Fluency Scaling Mini Table */
     .ace-scale-table {
         width: 100%;
         border-collapse: collapse;
-        font-size: 11px;
+        font-size: 13px;
         margin-top: 6px;
         background: #fff;
         border-radius: 6px;
@@ -880,12 +1144,11 @@ require 'layout/base.php';
     }
     .ace-scale-table td, .ace-scale-table th {
         border: 1px solid var(--ace-border);
-        padding: 3px 6px;
+        padding: 4px 6px;
         text-align: center;
         color: #475569;
     }
 
-    /* Address Learning 4-Column Table */
     .ace-address-table {
         width: 100%;
         border-collapse: separate;
@@ -901,7 +1164,7 @@ require 'layout/base.php';
         border-bottom: 1px solid var(--ace-border);
         padding: 10px 12px;
         vertical-align: top;
-        font-size: 13px;
+        font-size: 15px;
     }
     .ace-address-table th:last-child, .ace-address-table td:last-child {
         border-right: none;
@@ -915,7 +1178,6 @@ require 'layout/base.php';
         color: #334155;
     }
 
-    /* Picture Naming 3x4 Grid */
     .ace-pic-grid-12 {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -961,7 +1223,6 @@ require 'layout/base.php';
         stroke-linejoin: round;
     }
 
-    /* Visuospatial Models & Canvases */
     .ace-visuo-grid {
         display: grid;
         grid-template-columns: 270px minmax(0, 1fr);
@@ -982,7 +1243,7 @@ require 'layout/base.php';
         text-align: center;
     }
     .ace-stimulus-card span {
-        font-size: 11px;
+        font-size: 13.5px;
         font-weight: 700;
         color: #64748b;
         text-transform: uppercase;
@@ -1010,11 +1271,11 @@ require 'layout/base.php';
     .ace-canvas-bar {
         background: #f8fafc;
         border-bottom: 1px solid var(--ace-border);
-        padding: 7px 14px;
+        padding: 8px 14px;
         display: flex;
         justify-content: space-between;
         align-items: center;
-        font-size: 12px;
+        font-size: 13.5px;
         font-weight: 600;
         color: #475569;
     }
@@ -1027,7 +1288,6 @@ require 'layout/base.php';
         background: #fff;
     }
 
-    /* 2x2 Dot Counting & Fragmented Letters Grid */
     .ace-quad-grid {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1071,13 +1331,12 @@ require 'layout/base.php';
         height: 115px;
     }
 
-    /* Recognition Table (Page 6) */
     .ace-recog-table {
         width: 100%;
         border-collapse: separate;
         border-spacing: 0;
         margin-top: 10px;
-        font-size: 12.5px;
+        font-size: 15px;
         border: 1px solid var(--ace-border);
         border-radius: 10px;
         overflow: hidden;
@@ -1086,7 +1345,7 @@ require 'layout/base.php';
     .ace-recog-table th, .ace-recog-table td {
         border-right: 1px solid var(--ace-border);
         border-bottom: 1px solid var(--ace-border);
-        padding: 8px 12px;
+        padding: 10px 14px;
     }
     .ace-recog-table td:last-child {
         border-right: none;
@@ -1094,19 +1353,7 @@ require 'layout/base.php';
     .ace-recog-table tbody tr:last-child td {
         border-bottom: none;
     }
-    .ace-recog-table td.ace-recog-target {
-        font-weight: 700;
-        color: var(--ace-primary);
-        background: var(--ace-primary-soft);
-    }
-    .ace-recog-table td.ace-recog-shaded {
-        background: #f1f5f9;
-        color: #475569;
-        font-weight: 600;
-        width: 130px;
-    }
 
-    /* Sticky Bottom Bar INSIDE Container */
     .ace-sticky-footer {
         position: sticky;
         bottom: 12px;
@@ -1115,7 +1362,7 @@ require 'layout/base.php';
         backdrop-filter: blur(8px);
         color: #fff;
         border-radius: 12px;
-        padding: 12px 20px;
+        padding: 13px 20px;
         box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.25);
         display: flex;
         justify-content: space-between;
@@ -1127,32 +1374,58 @@ require 'layout/base.php';
     .ace-sticky-scores {
         display: flex;
         align-items: center;
-        gap: 14px;
+        gap: 18px;
         flex-wrap: wrap;
-        font-size: 12.5px;
+        font-size: 15px;
     }
     .ace-sticky-scores span {
         color: #94a3b8;
     }
     .ace-sticky-scores strong {
         color: #5eead4;
+        font-size: 17px;
         font-weight: 800;
         margin-left: 3px;
     }
     .ace-total-pill {
         background: var(--ace-primary);
         color: #fff;
-        padding: 6px 14px;
+        padding: 7px 16px;
         border-radius: 8px;
         font-weight: 800;
-        font-size: 14px;
+        font-size: 16px;
+    }
+    .ace-autosave-badge {
+        font-size: 13.5px;
+        font-weight: 600;
+        padding: 5px 12px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.1);
+        color: #cbd5e1;
+        white-space: nowrap;
+    }
+    .ace-autosave-badge.is-saved {
+        background: rgba(16, 185, 129, 0.18);
+        color: #6ee7b7;
+    }
+    .ace-autosave-badge.is-saving {
+        background: rgba(56, 189, 248, 0.18);
+        color: #7dd3fc;
+    }
+    .ace-autosave-badge.is-dirty {
+        background: rgba(251, 191, 36, 0.18);
+        color: #fde68a;
+    }
+    .ace-autosave-badge.is-error {
+        background: rgba(239, 68, 68, 0.22);
+        color: #fca5a5;
     }
 
     .ace-toast {
-        padding: 12px 16px;
+        padding: 13px 18px;
         border-radius: 10px;
         margin-bottom: 16px;
-        font-size: 13.5px;
+        font-size: 15px;
         font-weight: 600;
         box-shadow: var(--ace-shadow-sm);
     }
@@ -1173,7 +1446,7 @@ require 'layout/base.php';
     }
 </style>
 
-<div class="ace-page">
+<div class="ace-page<?php echo !$show_score_inputs ? ' ace-role-patient' : ''; ?>">
     <header class="ace-sheet-banner">
         <div>
             <h1>ADDENBROOKE'S COGNITIVE EXAMINATION - ACE-III</h1>
@@ -1197,6 +1470,7 @@ require 'layout/base.php';
 
     <form method="post" id="aceForm">
         <input type="hidden" name="csrf_token" value="<?php echo ace_iii_escape($_SESSION['ace_iii_csrf_token']); ?>">
+        <input type="hidden" name="draft_record_id" id="draft_record_id" value="<?php echo ($edit_record_id > 0 && $existing_record) ? (int) $edit_record_id : (int) ($_POST['draft_record_id'] ?? 0); ?>">
 
         <!-- TOP DEMOGRAPHICS TABLE (PAGE 1 HEADER) -->
         <section class="ace-paper-box">
@@ -1235,7 +1509,7 @@ require 'layout/base.php';
                     </div>
                 </div>
             </div>
-            <input type="hidden" name="demographics[date]" value="<?php echo ace_iii_escape($form_date); ?>">
+            <input type="hidden" name="demographics[date]" id="demographics_date_hidden" value="<?php echo ace_iii_escape($form_date); ?>">
             <?php echo assessment_demographics_html('demographics', $ace_demographics, ['hide_fields' => ['date', 'client_name', 'filled_by']]); ?>
         </section>
 
@@ -1329,7 +1603,9 @@ require 'layout/base.php';
                         <li>Register number of trials:</li>
                     </ul>
                     <input class="form-control form-control-sm" name="answers[registration_trials]" value="<?php echo ace_iii_escape($answers['registration_trials'] ?? ''); ?>" placeholder="Record subject's response &amp; number of trials">
-               
+                </div>
+                <div class="ace-split-right">
+                    <?php echo ace_iii_score_input('registration', 3, $submitted_scores, 'Attention'); ?>
                 </div>
             </div>
 
@@ -1356,7 +1632,6 @@ require 'layout/base.php';
                 </div>
             </div>
         </section>
-
 
         <!-- PAGE 1: MEMORY (3 WORDS RECALL) -->
         <section class="ace-paper-box">
@@ -1392,38 +1667,14 @@ require 'layout/base.php';
                 <div class="ace-split-right">
                     <?php echo ace_iii_score_input('letter_fluency', 7, $submitted_scores, 'Fluency'); ?>
                     <table class="ace-scale-table">
-                        <tr>
-                            <td>&gt;14</td>
-                            <td>7</td>
-                        </tr>
-                        <tr>
-                            <td>11-14</td>
-                            <td>6</td>
-                        </tr>
-                        <tr>
-                            <td>8-10</td>
-                            <td>5</td>
-                        </tr>
-                        <tr>
-                            <td>6-7</td>
-                            <td>4</td>
-                        </tr>
-                        <tr>
-                            <td>3-5</td>
-                            <td>3</td>
-                        </tr>
-                        <tr>
-                            <td>2</td>
-                            <td>2</td>
-                        </tr>
-                        <tr>
-                            <td>1</td>
-                            <td>1</td>
-                        </tr>
-                        <tr>
-                            <td>0</td>
-                            <td>0</td>
-                        </tr>
+                        <tr><td>&gt;14</td><td>7</td></tr>
+                        <tr><td>11-14</td><td>6</td></tr>
+                        <tr><td>8-10</td><td>5</td></tr>
+                        <tr><td>6-7</td><td>4</td></tr>
+                        <tr><td>3-5</td><td>3</td></tr>
+                        <tr><td>2</td><td>2</td></tr>
+                        <tr><td>1</td><td>1</td></tr>
+                        <tr><td>0</td><td>0</td></tr>
                     </table>
                 </div>
             </div>
@@ -1438,38 +1689,14 @@ require 'layout/base.php';
                 <div class="ace-split-right">
                     <?php echo ace_iii_score_input('animal_fluency', 7, $submitted_scores, 'Fluency'); ?>
                     <table class="ace-scale-table">
-                        <tr>
-                            <td>&gt;16</td>
-                            <td>7</td>
-                        </tr>
-                        <tr>
-                            <td>14-16</td>
-                            <td>6</td>
-                        </tr>
-                        <tr>
-                            <td>11-13</td>
-                            <td>5</td>
-                        </tr>
-                        <tr>
-                            <td>8-10</td>
-                            <td>4</td>
-                        </tr>
-                        <tr>
-                            <td>6-7</td>
-                            <td>3</td>
-                        </tr>
-                        <tr>
-                            <td>3-5</td>
-                            <td>2</td>
-                        </tr>
-                        <tr>
-                            <td>1-2</td>
-                            <td>1</td>
-                        </tr>
-                        <tr>
-                            <td>0</td>
-                            <td>0</td>
-                        </tr>
+                        <tr><td>&gt;16</td><td>7</td></tr>
+                        <tr><td>14-16</td><td>6</td></tr>
+                        <tr><td>11-13</td><td>5</td></tr>
+                        <tr><td>8-10</td><td>4</td></tr>
+                        <tr><td>6-7</td><td>3</td></tr>
+                        <tr><td>3-5</td><td>2</td></tr>
+                        <tr><td>1-2</td><td>1</td></tr>
+                        <tr><td>0</td><td>0</td></tr>
                     </table>
                 </div>
             </div>
@@ -1781,7 +2008,7 @@ require 'layout/base.php';
                 </div>
             </div>
 
-            <!-- Clock Drawing (With Clock Reference Diagram Added!) -->
+            <!-- Clock Drawing -->
             <div class="ace-split-row">
                 <div class="ace-split-left">
                     <p class="mb-2 fw-bold" style="font-size:13px;">&#10148; Clock: Ask the subject to draw a clock face with numbers and the hands at ten past five. (For scoring see instruction guide: circle = 1, numbers = 2, hands = 2 if all correct).</p>
@@ -1803,9 +2030,7 @@ require 'layout/base.php';
                                 <text x="24" y="74" text-anchor="middle" font-size="11" font-weight="bold" fill="#0f172a">9</text>
                                 <text x="31" y="49" text-anchor="middle" font-size="10" font-weight="bold" fill="#0f172a">10</text>
                                 <text x="47" y="33" text-anchor="middle" font-size="10" font-weight="bold" fill="#0f172a">11</text>
-                                <!-- Hour hand pointing to 5 -->
                                 <line x1="70" y1="70" x2="87" y2="98" stroke-width="4" />
-                                <!-- Minute hand pointing to 2 (10 minutes) -->
                                 <line x1="70" y1="70" x2="104" y2="50" stroke-width="2.5" />
                             </svg>
                         </div>
@@ -1831,13 +2056,9 @@ require 'layout/base.php';
                     <p class="mb-2 fw-bold" style="font-size:13px;">&#10148; Ask the subject to count the dots without pointing to them</p>
                     <?php
                     $dot_positions = [
-                        // Box 1: 8 dots
                         [[14, 14], [18, 44], [34, 52], [48, 38], [62, 58], [52, 82], [80, 32], [78, 56]],
-                        // Box 2: 10 dots
                         [[22, 42], [28, 30], [48, 40], [38, 60], [52, 72], [58, 82], [68, 68], [68, 24], [82, 22], [86, 86]],
-                        // Box 3: 7 dots
                         [[24, 18], [72, 20], [28, 52], [44, 46], [42, 68], [14, 84], [78, 80]],
-                        // Box 4: 9 dots
                         [[20, 14], [18, 44], [26, 68], [46, 36], [48, 72], [68, 22], [74, 44], [78, 56], [86, 86]],
                     ];
                     ?>
@@ -1926,11 +2147,11 @@ require 'layout/base.php';
                 </div>
             </div>
 
-            <div class="ace-domain-bar"><span>MEMORY</span></div>
+            <div class="ace-domain-bar"><span>MEMORY (RECOGNITION &amp; SUMMARY)</span></div>
             <div class="ace-split-row">
                 <div class="ace-split-left">
                     <p class="mb-2" style="font-size:12.5px;">&#10148; This test should be done if the subject failed to recall one or more items above. If all items were recalled, skip the test and score 5. If only part was recalled start by ticking items recalled in the shadowed column on the right hand side; and then test not recalled items by telling the subject "ok, I'll give you some hints: was the name X, Y or Z?" and so on. Each recognised item scores one point, which is added to the point gained by recalling.</p>
-                    <div class="table-responsive">
+                    <div class="table-responsive mb-3">
                         <table class="ace-recog-table">
                             <tbody>
                                 <tr class="table-light fw-bold">
@@ -1978,16 +2199,12 @@ require 'layout/base.php';
                     </div>
                 </div>
                 <div class="ace-split-right">
-                    <div class="ace-score-box">
-                        <span class="ace-score-title">Memory</span>
-                        <span class="ace-score-range">[Score 0–4]</span>
-                        <div class="fw-bold mt-1 fs-5" id="retro_mem_sub">0</div>
-                    </div>
+                    <?php echo ace_iii_score_input('address_recognition', 5, $submitted_scores, 'Memory'); ?>
                 </div>
             </div>
         </section>
 
-        <!-- STICKY FOOTER BAR (CONTAINED INSIDE .ace-page - WILL NEVER OVERLAP SIDEBAR) -->
+        <!-- STICKY FOOTER BAR -->
         <div class="ace-sticky-footer" aria-live="polite">
             <div class="ace-sticky-scores">
                 <div><span>Attention:</span><strong id="sticky_attention">0</strong>/18</div>
@@ -1996,7 +2213,8 @@ require 'layout/base.php';
                 <div><span>Language:</span><strong id="sticky_language">0</strong>/26</div>
                 <div><span>Visuospatial:</span><strong id="sticky_visuospatial">0</strong>/16</div>
             </div>
-            <div class="d-flex align-items-center gap-2">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <span id="ace_iii_autosave_status" class="ace-autosave-badge">Autosave ready</span>
                 <div class="ace-total-pill">Total Score: <span id="sticky_total">0</span> / 100</div>
                 <button type="submit" class="btn btn-sm btn-light fw-bold" name="submit_ace_iii" value="1" <?php echo empty($patients) || !$ace_iii_schema_ready ? 'disabled' : ''; ?>>
                     Save Record
@@ -2008,12 +2226,23 @@ require 'layout/base.php';
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        var isAdmin = <?php echo $is_admin ? 'true' : 'false'; ?>;
         var isPatient = <?php echo $is_patient ? 'true' : 'false'; ?>;
+        var aceForm = document.getElementById('aceForm');
+        var draftIdInput = document.getElementById('draft_record_id');
+        var statusEl = document.getElementById('ace_iii_autosave_status');
+        var dateInput = document.getElementById('assessment_date');
+        var hiddenDemoDate = document.getElementById('demographics_date_hidden');
+
+        if (dateInput && hiddenDemoDate) {
+            dateInput.addEventListener('change', function() {
+                hiddenDemoDate.value = dateInput.value;
+            });
+        }
 
         if (isPatient) {
             document.querySelectorAll('.ace-score').forEach(function(input) {
                 input.disabled = true;
+                input.required = false;
                 input.value = '';
                 input.setAttribute('tabindex', '-1');
                 input.setAttribute('aria-hidden', 'true');
@@ -2109,8 +2338,10 @@ require 'layout/base.php';
             });
 
             var grandStr = String(grand);
-            document.getElementById('total_all').textContent = grandStr;
-            document.getElementById('sticky_total').textContent = grandStr;
+            var totalAllEl = document.getElementById('total_all');
+            var stickyTotalEl = document.getElementById('sticky_total');
+            if (totalAllEl) totalAllEl.textContent = grandStr;
+            if (stickyTotalEl) stickyTotalEl.textContent = grandStr;
 
             var interpretation = '82-Below - Abnormal Cognitive Function';
             var interpretationClass = 'text-danger';
@@ -2134,6 +2365,117 @@ require 'layout/base.php';
         });
         updateTotals();
 
+        /* =========================================================
+           ROBUST AUTOSAVE ENGINE
+           ========================================================= */
+        var autosaveTimeout = null;
+        var isAutosaving = false;
+        var isDirty = false;
+        var pendingAutosave = false;
+        var isSubmitting = false;
+
+        function setAutosaveStatus(message, stateClass) {
+            if (!statusEl) return;
+            statusEl.textContent = message;
+            statusEl.className = 'ace-autosave-badge' + (stateClass ? ' ' + stateClass : '');
+        }
+
+        function syncEditIdInUrl(draftId) {
+            if (!draftId || !window.history || !window.history.replaceState) return;
+            try {
+                var url = new URL(window.location.href);
+                if (url.searchParams.get('edit_id') !== String(draftId)) {
+                    url.searchParams.set('edit_id', String(draftId));
+                    window.history.replaceState(null, '', url.toString());
+                }
+            } catch (e) {
+                // Ignore URL update error in older browsers
+            }
+        }
+
+        function autosaveDraft() {
+            if (isSubmitting || !isDirty) return;
+
+            if (isAutosaving) {
+                pendingAutosave = true;
+                return;
+            }
+
+            var patient = aceForm.querySelector('[name="patient_id"]');
+            if (!patient || !patient.value) {
+                setAutosaveStatus('Select patient to autosave', 'is-error');
+                return;
+            }
+
+            isAutosaving = true;
+            isDirty = false;
+            setAutosaveStatus('Saving draft...', 'is-saving');
+
+            var formData = new FormData(aceForm);
+            formData.append('autosave_ace_iii', '1');
+
+            fetch(window.location.href, {
+                method: 'POST',
+                body: formData,
+                credentials: 'same-origin',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                }
+            })
+            .then(function(response) {
+                return response.text().then(function(text) {
+                    var data;
+                    try {
+                        data = JSON.parse(text);
+                    } catch (err) {
+                        throw new Error('Invalid server response (HTTP ' + response.status + ')');
+                    }
+                    if (!response.ok || !data.ok) {
+                        throw new Error(data.message || ('Autosave failed (HTTP ' + response.status + ')'));
+                    }
+                    return data;
+                });
+            })
+            .then(function(data) {
+                if (data.draft_id) {
+                    draftIdInput.value = String(data.draft_id);
+                    syncEditIdInUrl(data.draft_id);
+                }
+                if (!pendingAutosave && !isDirty) {
+                    setAutosaveStatus('Draft saved at ' + data.saved_at, 'is-saved');
+                }
+            })
+            .catch(function(error) {
+                isDirty = true; // Keep dirty so next attempt retries
+                setAutosaveStatus(error.message || 'Draft autosave failed', 'is-error');
+            })
+            .finally(function() {
+                isAutosaving = false;
+                if (pendingAutosave) {
+                    pendingAutosave = false;
+                    isDirty = true;
+                    autosaveDraft();
+                }
+            });
+        }
+
+        function queueAutosave() {
+            if (isSubmitting) return;
+            isDirty = true;
+            setAutosaveStatus('Unsaved changes...', 'is-dirty');
+            clearTimeout(autosaveTimeout);
+            autosaveTimeout = setTimeout(autosaveDraft, 1200);
+        }
+
+        // Bind input & change events on all form fields
+        aceForm.querySelectorAll('input, textarea, select').forEach(function(control) {
+            if (control.type === 'hidden') return;
+            control.addEventListener('input', queueAutosave);
+            control.addEventListener('change', queueAutosave);
+        });
+
+        // Canvas Drawing Setup (connected with queueAutosave)
         document.querySelectorAll('.ace-canvas').forEach(function(canvas) {
             var context = canvas.getContext('2d');
             var hidden = document.querySelector('input[name="answers[drawing_' + canvas.dataset.drawing + ']"]');
@@ -2170,6 +2512,7 @@ require 'layout/base.php';
                     y: event.clientY - rect.top
                 };
             }
+
             canvas.addEventListener('pointerdown', function(event) {
                 drawing = true;
                 canvas.setPointerCapture(event.pointerId);
@@ -2177,6 +2520,7 @@ require 'layout/base.php';
                 context.beginPath();
                 context.moveTo(p.x, p.y);
             });
+
             canvas.addEventListener('pointermove', function(event) {
                 if (!drawing) return;
                 var p = point(event);
@@ -2188,7 +2532,9 @@ require 'layout/base.php';
                 if (!drawing) return;
                 drawing = false;
                 hidden.value = canvas.toDataURL('image/png');
+                queueAutosave();
             }
+
             canvas.addEventListener('pointerup', finishDrawing);
             canvas.addEventListener('pointercancel', finishDrawing);
 
@@ -2196,7 +2542,30 @@ require 'layout/base.php';
                 clearBtn.addEventListener('click', function() {
                     context.clearRect(0, 0, canvas.width, canvas.height);
                     hidden.value = '';
+                    queueAutosave();
                 });
+            }
+        });
+
+        // Backup interval: only fires if there are unsaved changes
+        setInterval(function() {
+            if (isDirty && !isAutosaving && !isSubmitting) {
+                autosaveDraft();
+            }
+        }, 20000);
+
+        // Disable autosave & unload warning on final submit
+        aceForm.addEventListener('submit', function() {
+            isSubmitting = true;
+            isDirty = false;
+            clearTimeout(autosaveTimeout);
+        });
+
+        // Warn user if leaving with unsaved changes
+        window.addEventListener('beforeunload', function(event) {
+            if (isDirty && !isSubmitting) {
+                event.preventDefault();
+                event.returnValue = '';
             }
         });
     });

@@ -35,7 +35,13 @@
         ], true);
         $is_panss_active = in_array($current_page, [
             'panss-assessments.php',
-            'panss-assessment-records.php'
+            'panss-assessment-records.php',
+            'panss-assessment-score.php'
+        ], true);
+        $is_ymrs_active = in_array($current_page, [
+            'ymrs-assessments.php',
+            'ymrs-assessment-records.php',
+            'ymrs-assessment-score.php'
         ], true);
         $is_assessment_active = in_array($current_page, [
             'public-assessment-form.php',
@@ -89,6 +95,27 @@
                     </li>
                     <li class="nav-item">
                         <a class="nav-link <?= $current_page == 'panss-assessment-records.php' ? 'active' : ''; ?>" href="panss-assessment-records.php" <?= $current_page == 'panss-assessment-records.php' ? 'aria-current="page"' : ''; ?>>
+                            <span class="nav-icon"><i class="bi bi-table" aria-hidden="true"></i></span>
+                            <span class="nav-text">Assessment Records</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            <a class="nav-link <?= $is_ymrs_active ? 'active' : ''; ?>" data-bs-toggle="collapse" href="#ymrsCollapse" role="button" aria-expanded="<?= $is_ymrs_active ? 'true' : 'false'; ?>" aria-controls="ymrsCollapse">
+                <span class="nav-icon"><i class="bi bi-lightning-charge" aria-hidden="true"></i></span>
+                <span class="nav-text">YMRS Assessment</span>
+                <span class="ms-auto collapse-indicator"><i class="bi bi-chevron-down" aria-hidden="true"></i></span>
+            </a>
+            <div class="collapse <?= $is_ymrs_active ? 'show' : ''; ?>" id="ymrsCollapse">
+                <ul class="nav flex-column ms-3">
+                    <li class="nav-item">
+                        <a class="nav-link <?= $current_page == 'ymrs-assessments.php' ? 'active' : ''; ?>" href="ymrs-assessments.php">
+                            <span class="nav-icon"><i class="bi bi-ui-checks" aria-hidden="true"></i></span>
+                            <span class="nav-text">Assessment Form</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link <?= $current_page == 'ymrs-assessment-records.php' || $current_page == 'ymrs-assessment-score.php' ? 'active' : ''; ?>" href="ymrs-assessment-records.php">
                             <span class="nav-icon"><i class="bi bi-table" aria-hidden="true"></i></span>
                             <span class="nav-text">Assessment Records</span>
                         </a>
