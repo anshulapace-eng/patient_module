@@ -1,0 +1,17 @@
+Options -Indexes
+DirectoryIndex login.php
+
+RewriteEngine On
+
+# Canonically redirect direct .php URLs to extensionless URLs.
+RewriteRule ^(.+)\.php$ /patient_module/$1 [R=308,L,NC]
+
+# Leave assets and directories untouched.
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [END]
+
+# Internally serve extensionless URLs.
+RewriteRule ^([A-Za-z0-9_-]+)$ $1.php [END]
+
+RewriteRule ^$ login.php [END]
