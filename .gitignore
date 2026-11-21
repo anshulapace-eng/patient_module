@@ -1,4 +1,5 @@
 # Local configuration and secrets
+/config.php
 /.env
 /.env.*
 !/.env.example
