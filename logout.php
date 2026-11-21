@@ -45,5 +45,5 @@ session_unset();
 session_destroy();
 
 // 6. Main Patient Module login page par bhej do
-header("Location: https://media.academic.vimhans.com/patient_module/login.php");
+header("Location: /patient_module/login");
 exit();
