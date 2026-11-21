@@ -695,151 +695,231 @@ function ace_iii_score_input($field, $maximum, $submitted_scores, $domain_label 
         '</div>';
 }
 
-function ace_iii_get_picture_svg($index)
+function ace_iii_render_diagram($filename_base, $fallback_svg, $alt = 'ACE-III Diagram', $img_class = 'ace-model-img')
 {
-    foreach (['png', 'jpg', 'jpeg', 'webp'] as $ext) {
-        $relative_path = 'assets/ace-iii/pic_' . (int) $index . '.' . $ext;
-        if (file_exists(__DIR__ . '/' . $relative_path)) {
-            return '<img src="' . ace_iii_escape($relative_path) . '" alt="ACE-III Picture ' . (int) $index . '" class="ace-real-img">';
+    foreach (['png', 'jpg', 'jpeg', 'webp', 'svg'] as $ext) {
+        $relative_path = 'assets/ace-iii/' . $filename_base . '.' . $ext;
+        $full_path = __DIR__ . '/' . $relative_path;
+        if (file_exists($full_path)) {
+            $version = @filemtime($full_path);
+            $src = $relative_path . ($version ? '?v=' . $version : '');
+            return '<img src="' . ace_iii_escape($src) . '" alt="' . ace_iii_escape($alt) . '" class="' . ace_iii_escape($img_class) . '">';
         }
     }
+    return $fallback_svg;
+}
+
+function ace_iii_get_picture_svg($index)
+{
+    $idx = (int) $index;
+    $labels = [
+        1 => 'Book',
+        2 => 'Spoon',
+        3 => 'Goat',
+        4 => 'Candle',
+        5 => 'Flag',
+        6 => 'Camel',
+        7 => 'Sickle',
+        8 => 'Giraffe',
+        9 => 'Drum',
+        10 => 'Umbrella',
+        11 => 'Pig',
+        12 => 'Crocodile',
+    ];
+    $label = $labels[$idx] ?? ('ACE-III Picture ' . $idx);
 
     $svgs = [
-        1 => '<svg viewBox="0 0 160 120" class="ace-detailed-svg">
-            <path d="M38 22 L114 15 L122 21 L48 28 Z" fill="#f1f5f9"/>
-            <path d="M38 22 L114 15 M42 25 L118 18 M48 28 L122 21" stroke-width="1.3"/>
-            <path d="M38 22 C33 24 33 28 38 30 L38 98 C33 96 33 92 38 90" fill="#e2e8f0"/>
-            <polygon points="48,28 122,21 122,92 48,100" fill="#ffffff"/>
-            <path d="M38 22 L38 94 C38 98 43 100 48 100 L48 28 C43 28 38 25 38 22 Z" fill="#cbd5e1"/>
-            <line x1="56" y1="27" x2="56" y2="99" stroke-width="1.5"/>
-            <line x1="114" y1="15" x2="114" y2="21"/>
+        1 => '<svg viewBox="0 0 180 130" role="img" aria-label="Book">
+            <path d="M44 26 L124 16 L138 26 L58 36 Z" fill="#f8fafc"/>
+            <path d="M48 29 L127 19 M52 32 L131 22" stroke-width="1.2" opacity="0.7"/>
+            <path d="M44 26 C38 28 38 34 44 36 L44 106 C38 104 38 98 44 96" fill="#e2e8f0"/>
+            <path d="M44 26 L58 36 L58 114 L44 104 Z" fill="#cbd5e1"/>
+            <polygon points="58,36 138,26 138,104 58,114" fill="#ffffff"/>
+            <line x1="67" y1="35" x2="67" y2="113" stroke-width="1.6"/>
+            <rect x="78" y="48" width="44" height="16" rx="1" transform="skewY(-7)" stroke-width="1.4" fill="#f8fafc"/>
+            <line x1="85" y1="45" x2="114" y2="41.5" stroke-width="1.3"/>
+            <line x1="88" y1="51" x2="111" y2="48" stroke-width="1.3"/>
         </svg>',
-        2 => '<svg viewBox="0 0 160 120" class="ace-detailed-svg">
-            <path d="M102 22 C118 14 136 18 134 30 C132 42 112 48 96 42 C90 40 86 38 80 42 L32 82 C26 87 20 82 25 76 L75 36 C82 31 92 27 102 22 Z" fill="#f8fafc"/>
-            <ellipse cx="114" cy="31" rx="16" ry="9" transform="rotate(-22 114 31)" stroke-width="1.2" fill="#e2e8f0"/>
-            <path d="M98 28 C108 22 122 22 126 27" stroke-width="1" opacity="0.6"/>
+        2 => '<svg viewBox="0 0 180 130" role="img" aria-label="Spoon">
+            <path d="M108 32 C126 20 152 22 154 36 C156 50 132 62 112 56 C104 54 98 52 92 57 L36 102 C29 107 21 100 27 93 L84 48 C92 42 100 37 108 32 Z" fill="#ffffff"/>
+            <ellipse cx="131" cy="39" rx="18" ry="10" transform="rotate(-18 131 39)" fill="#f1f5f9" stroke-width="1.4"/>
+            <path d="M118 39 C126 32 138 31 144 35" stroke-width="1.2" opacity="0.6"/>
+            <path d="M35 95 L86 54" stroke-width="1.1" opacity="0.45"/>
         </svg>',
-        3 => '<svg viewBox="0 0 160 120" class="ace-detailed-svg">
-            <path d="M38 56 C52 52 78 52 94 55 L108 32 L118 32 L126 42 L116 46 L112 44 L104 62 C106 70 102 76 96 78 L98 102 L93 102 L90 78 C76 80 58 78 48 75 L42 102 L37 102 L41 74 L33 100 L28 100 L34 68 C32 62 34 58 38 56 Z" fill="#ffffff"/>
-            <path d="M96 78 L103 101 L98 102" fill="none"/>
-            <path d="M38 56 C32 50 28 46 26 42 C32 44 36 48 40 55" fill="#e2e8f0"/>
-            <path d="M108 32 C102 22 92 20 86 24 C94 23 100 26 105 34" fill="#cbd5e1"/>
-            <path d="M111 32 C106 23 98 21 92 24" fill="none"/>
-            <path d="M110 38 C108 46 110 52 113 54 C115 50 114 43 112 38" fill="#e2e8f0"/>
-            <path d="M120 45 L122 53 L118 51" fill="none"/>
-            <circle cx="116" cy="37" r="1.5" fill="#0f172a"/>
+        3 => '<svg viewBox="0 0 180 130" role="img" aria-label="Goat">
+            <path d="M44 60 C62 54 88 54 106 58 L120 34 L132 34 L144 43 L135 49 L126 47 L116 66 C118 74 114 82 106 84 L110 112 L103 112 L98 85 C82 87 64 85 54 82 L48 112 L41 112 L46 80 L36 110 L30 110 L38 72 C36 66 38 62 44 60 Z" fill="#ffffff"/>
+            <path d="M106 84 L115 110 L109 112" fill="none"/>
+            <path d="M44 60 C36 53 31 48 28 43 C35 45 41 50 46 58" fill="#e2e8f0"/>
+            <path d="M122 34 C115 20 102 17 94 22 C104 21 112 26 118 35" fill="#cbd5e1"/>
+            <path d="M126 34 C120 22 109 18 102 22" fill="none"/>
+            <path d="M122 40 C119 48 121 55 125 57 C127 52 126 45 124 40" fill="#e2e8f0"/>
+            <path d="M135 49 L137 59 L131 55 L129 48" fill="#f1f5f9"/>
+            <circle cx="130" cy="40" r="1.8" fill="#0f172a" stroke="none"/>
+            <line x1="41" y1="108" x2="48" y2="108" stroke-width="2"/>
+            <line x1="103" y1="108" x2="110" y2="108" stroke-width="2"/>
         </svg>',
-        4 => '<svg viewBox="0 0 160 120" class="ace-detailed-svg">
-            <path d="M62 46 L62 100 C62 104 98 104 98 100 L98 46" fill="#ffffff"/>
-            <ellipse cx="80" cy="46" rx="18" ry="5" fill="#f1f5f9"/>
-            <path d="M62 46 C65 54 70 52 72 49 C75 56 81 56 83 50 C86 54 94 53 98 46" fill="#e2e8f0"/>
-            <line x1="80" y1="45" x2="80" y2="38" stroke-width="2.2"/>
-            <path d="M80 12 C71 23 70 34 80 38 C90 34 89 23 80 12 Z" fill="#fef08a"/>
-            <path d="M80 20 C76 26 76 33 80 36 C84 33 84 26 80 20 Z" fill="#fde047" stroke-width="1"/>
+        4 => '<svg viewBox="0 0 180 130" role="img" aria-label="Candle">
+            <ellipse cx="90" cy="112" rx="34" ry="7" fill="#f1f5f9" stroke-width="1.6"/>
+            <path d="M68 50 L68 108 C68 113 112 113 112 108 L112 50" fill="#ffffff"/>
+            <ellipse cx="90" cy="50" rx="22" ry="6" fill="#f8fafc"/>
+            <path d="M68 50 C72 62 77 58 80 54 C83 66 90 66 93 55 C97 62 105 60 112 50" fill="#e2e8f0"/>
+            <path d="M90 49 Q91 44 90 40" stroke-width="2.4"/>
+            <path d="M90 12 C79 25 78 38 90 42 C102 38 101 25 90 12 Z" fill="#fef08a"/>
+            <path d="M90 22 C85 29 85 37 90 40 C95 37 95 29 90 22 Z" fill="#fde047" stroke-width="1.2"/>
         </svg>',
-        5 => '<svg viewBox="0 0 160 120" class="ace-detailed-svg">
-            <rect x="34" y="14" width="4" height="94" rx="1.5" fill="#cbd5e1"/>
-            <circle cx="36" cy="13" r="3" fill="#94a3b8"/>
-            <path d="M38 20 Q68 17 96 22 L96 68 Q68 63 38 66 Z" fill="#ffffff"/>
-            <path d="M38 35 Q68 32 96 37 M38 51 Q68 48 96 53" stroke-width="1.6"/>
-            <path d="M96 24 L118 27 L118 72 L96 68" fill="#f8fafc"/>
-            <path d="M96 39 L118 42 M96 54 L118 57" stroke-width="1.4"/>
-            <circle cx="67" cy="43" r="6.5" stroke-width="1.4"/>
-            <circle cx="67" cy="43" r="1.5" fill="#0f172a"/>
-            <line x1="67" y1="36.5" x2="67" y2="49.5" stroke-width="1"/>
-            <line x1="60.5" y1="43" x2="73.5" y2="43" stroke-width="1"/>
-            <line x1="62.5" y1="38.5" x2="71.5" y2="47.5" stroke-width="1"/>
-            <line x1="71.5" y1="38.5" x2="62.5" y2="47.5" stroke-width="1"/>
+        5 => '<svg viewBox="0 0 180 130" role="img" aria-label="Flag">
+            <rect x="40" y="16" width="5" height="100" rx="2" fill="#cbd5e1"/>
+            <circle cx="42.5" cy="14" r="4" fill="#94a3b8"/>
+            <path d="M45 22 Q78 16 112 24 Q130 28 144 24 L144 74 Q130 78 112 74 Q78 66 45 72 Z" fill="#ffffff"/>
+            <path d="M45 38 Q78 32 112 40 Q130 44 144 40" stroke-width="1.7"/>
+            <path d="M45 55 Q78 49 112 57 Q130 61 144 57" stroke-width="1.7"/>
+            <circle cx="94" cy="46" r="7.5" stroke-width="1.5"/>
+            <circle cx="94" cy="46" r="1.6" fill="#0f172a" stroke="none"/>
+            <line x1="94" y1="38.5" x2="94" y2="53.5" stroke-width="1.1"/>
+            <line x1="86.5" y1="46" x2="101.5" y2="46" stroke-width="1.1"/>
+            <line x1="88.7" y1="40.7" x2="99.3" y2="51.3" stroke-width="1.1"/>
+            <line x1="99.3" y1="40.7" x2="88.7" y2="51.3" stroke-width="1.1"/>
+            <path d="M32 116 L53 116" stroke-width="2.5"/>
         </svg>',
-        6 => '<svg viewBox="0 0 160 120" class="ace-detailed-svg">
-            <path d="M38 58 C42 30 68 28 78 48 C84 54 90 54 96 42 C100 32 102 22 108 20 L120 20 C123 22 122 26 116 27 L110 28 C106 38 104 52 98 62 C96 68 94 72 90 74 L90 102 L85 102 L84 76 L78 102 L73 102 L76 74 C64 76 54 74 48 72 L44 102 L39 102 L42 74 L35 104 L30 104 L34 68 C32 62 34 58 38 56 Z" fill="#ffffff"/>
-            <path d="M38 58 L30 74 L33 76 L37 64" fill="#e2e8f0"/>
-            <circle cx="113" cy="23" r="1.4" fill="#0f172a"/>
-            <path d="M107 20 L105 16 L109 18" fill="none"/>
+        6 => '<svg viewBox="0 0 180 130" role="img" aria-label="Camel">
+            <path d="M44 62 C48 28 80 26 92 50 C99 58 106 58 113 44 C118 32 121 20 128 18 L142 18 C146 21 144 27 137 28 L130 29 C125 42 122 58 115 69 C112 76 109 80 104 82 L105 114 L99 114 L97 84 L90 114 L84 114 L88 82 C74 84 62 82 54 79 L50 114 L44 114 L47 81 L39 114 L33 114 L39 74 C37 68 39 64 44 62 Z" fill="#ffffff"/>
+            <path d="M44 62 L34 80 L37 82 L43 68" fill="#e2e8f0"/>
+            <circle cx="134" cy="22" r="1.6" fill="#0f172a" stroke="none"/>
+            <path d="M126 18 L124 13 L129 16" fill="none"/>
+            <path d="M56 44 C64 36 76 36 82 44" stroke-width="1.2" opacity="0.5"/>
         </svg>',
-        7 => '<svg viewBox="0 0 160 120" class="ace-detailed-svg">
-            <path d="M26 88 L56 66 C60 63 64 67 60 71 L32 95 C27 98 22 92 26 88 Z" fill="#e2e8f0"/>
-            <path d="M55 65 L62 60 L66 65 L59 70 Z" fill="#94a3b8"/>
-            <path d="M64 61 C82 48 118 48 114 22 C112 12 100 10 92 14 C104 16 106 26 98 36 C90 46 74 48 61 59 Z" fill="#f8fafc"/>
+        7 => '<svg viewBox="0 0 180 130" role="img" aria-label="Sickle">
+            <path d="M32 98 L68 72 C73 68 78 74 73 79 L39 106 C33 110 26 103 32 98 Z" fill="#e2e8f0"/>
+            <path d="M67 71 L76 64 L81 71 L72 78 Z" fill="#94a3b8"/>
+            <path d="M78 66 C100 50 144 50 138 20 C135 8 120 7 109 12 C124 15 127 28 117 40 C107 52 88 54 74 65 Z" fill="#ffffff"/>
+            <path d="M84 62 C104 51 131 46 131 24" stroke-width="1.2" opacity="0.5"/>
+            <line x1="42" y1="92" x2="48" y2="98" stroke-width="1.2" opacity="0.5"/>
+            <line x1="52" y1="84" x2="58" y2="90" stroke-width="1.2" opacity="0.5"/>
         </svg>',
-        8 => '<svg viewBox="0 0 160 120" class="ace-detailed-svg">
-            <path d="M44 64 L72 54 L98 14 L108 14 L114 19 L106 22 L102 21 L84 58 C86 64 84 70 80 73 L82 104 L77 104 L75 74 L70 104 L65 104 L68 74 C58 75 52 74 48 72 L44 104 L39 104 L42 74 L35 104 L30 104 L38 68 C38 66 40 65 44 64 Z" fill="#ffffff"/>
-            <line x1="101" y1="14" x2="100" y2="9"/><circle cx="100" cy="8" r="1.5" fill="#0f172a"/>
-            <line x1="105" y1="14" x2="105" y2="9"/><circle cx="105" cy="8" r="1.5" fill="#0f172a"/>
-            <path d="M38 68 L31 84" stroke-width="1.5"/>
-            <polygon points="88,28 93,26 92,32 87,33" fill="#94a3b8" stroke="none"/>
-            <polygon points="82,38 87,36 86,43 80,42" fill="#94a3b8" stroke="none"/>
-            <polygon points="75,49 81,48 80,55 74,54" fill="#94a3b8" stroke="none"/>
-            <polygon points="62,59 69,57 70,64 62,65" fill="#94a3b8" stroke="none"/>
-            <polygon points="72,62 79,60 79,68 72,68" fill="#94a3b8" stroke="none"/>
-            <polygon points="49,64 57,62 57,69 49,69" fill="#94a3b8" stroke="none"/>
-            <polygon points="58,68 65,67 64,72 57,72" fill="#94a3b8" stroke="none"/>
+        8 => '<svg viewBox="0 0 180 130" role="img" aria-label="Giraffe">
+            <path d="M50 70 L82 58 L112 14 L124 14 L132 20 L122 24 L117 23 L96 63 C98 70 96 77 91 80 L94 116 L88 116 L85 82 L79 116 L73 116 L77 81 C66 82 58 81 53 79 L49 116 L43 116 L47 81 L39 116 L33 116 L43 74 C43 72 46 71 50 70 Z" fill="#ffffff"/>
+            <line x1="115" y1="14" x2="114" y2="8"/><circle cx="114" cy="7" r="1.8" fill="#0f172a" stroke="none"/>
+            <line x1="120" y1="14" x2="120" y2="8"/><circle cx="120" cy="7" r="1.8" fill="#0f172a" stroke="none"/>
+            <path d="M43 74 L35 92" stroke-width="1.6"/>
+            <circle cx="122" cy="18" r="1.5" fill="#0f172a" stroke="none"/>
+            <polygon points="101,30 107,28 105,35 99,36" fill="#94a3b8" stroke="none"/>
+            <polygon points="94,42 100,40 99,48 92,47" fill="#94a3b8" stroke="none"/>
+            <polygon points="86,54 93,53 92,61 85,60" fill="#94a3b8" stroke="none"/>
+            <polygon points="71,65 79,63 80,71 71,72" fill="#94a3b8" stroke="none"/>
+            <polygon points="83,68 91,66 91,75 83,75" fill="#94a3b8" stroke="none"/>
+            <polygon points="56,70 65,68 65,76 56,76" fill="#94a3b8" stroke="none"/>
+            <polygon points="67,75 75,74 74,80 66,80" fill="#94a3b8" stroke="none"/>
         </svg>',
-        9 => '<svg viewBox="0 0 160 120" class="ace-detailed-svg">
-            <path d="M36 48 C38 86 58 98 80 98 C102 98 122 86 124 48" fill="#f8fafc"/>
-            <ellipse cx="80" cy="48" rx="44" ry="12" fill="#ffffff"/>
-            <ellipse cx="80" cy="48" rx="37" ry="9" stroke-width="1.2" fill="#f1f5f9"/>
-            <path d="M38 53 L48 84 L58 57 L68 93 L80 59 L92 93 L102 57 L112 84 L122 53" stroke-width="1.6"/>
-            <path d="M43 74 Q80 84 117 74" stroke-width="1.5"/>
-            <line x1="62" y1="36" x2="106" y2="20" stroke-width="2.8"/>
-            <circle cx="61" cy="36" r="3" fill="#0f172a"/>
-            <line x1="72" y1="43" x2="116" y2="27" stroke-width="2.8"/>
-            <circle cx="71" cy="43" r="3" fill="#0f172a"/>
+        9 => '<svg viewBox="0 0 180 130" role="img" aria-label="Drum">
+            <path d="M40 54 C42 96 65 110 90 110 C115 110 138 96 140 54" fill="#f8fafc"/>
+            <ellipse cx="90" cy="54" rx="50" ry="14" fill="#ffffff"/>
+            <ellipse cx="90" cy="54" rx="42" ry="10.5" fill="#f1f5f9" stroke-width="1.3"/>
+            <path d="M42 60 L54 94 L66 64 L78 104 L90 66 L102 104 L114 64 L126 94 L138 60" stroke-width="1.7"/>
+            <path d="M48 84 Q90 95 132 84" stroke-width="1.5"/>
+            <line x1="68" y1="40" x2="122" y2="20" stroke-width="3.2"/>
+            <circle cx="67" cy="40" r="3.8" fill="#0f172a" stroke="none"/>
+            <line x1="80" y1="48" x2="134" y2="28" stroke-width="3.2"/>
+            <circle cx="79" cy="48" r="3.8" fill="#0f172a" stroke="none"/>
         </svg>',
-        10 => '<svg viewBox="0 0 160 120" class="ace-detailed-svg">
-            <path d="M26 58 C32 20 96 12 118 46 Z" fill="#f8fafc"/>
-            <path d="M26 58 Q41 50 56 54 Q72 46 88 51 Q103 43 118 46" fill="#ffffff"/>
-            <path d="M68 23 Q52 36 56 54 M68 23 Q80 34 88 51 M68 23 Q38 36 26 58 M68 23 Q98 32 118 46" stroke-width="1.3"/>
-            <line x1="66" y1="16" x2="68" y2="23" stroke-width="2.5"/>
-            <path d="M72 49 L92 92 C95 99 85 104 81 97 L79 93" stroke-width="2.6"/>
+        10 => '<svg viewBox="0 0 180 130" role="img" aria-label="Umbrella">
+            <path d="M30 64 C38 20 112 12 138 50 Z" fill="#f8fafc"/>
+            <path d="M30 64 Q48 54 66 59 Q84 50 102 56 Q120 46 138 50" fill="#ffffff"/>
+            <path d="M78 24 Q60 40 66 59 M78 24 Q92 38 102 56 M78 24 Q44 40 30 64 M78 24 Q114 34 138 50" stroke-width="1.4"/>
+            <line x1="76" y1="16" x2="78" y2="24" stroke-width="2.8"/>
+            <path d="M84 54 L108 104 C112 112 100 118 95 110 L93 105" stroke-width="3"/>
         </svg>',
-        11 => '<svg viewBox="0 0 160 120" class="ace-detailed-svg">
-            <path d="M44 52 C54 36 94 34 114 46 C124 52 124 68 112 74 L110 96 L104 96 L104 76 C92 80 72 80 60 76 L56 96 L50 96 L52 74 L44 94 L38 94 L44 70 C36 68 32 64 26 64 L24 56 L34 54 C36 50 40 48 44 52 Z" fill="#ffffff"/>
-            <ellipse cx="25" cy="60" rx="2.5" ry="4" fill="#e2e8f0"/>
-            <path d="M48 48 C42 42 36 44 40 52" fill="#e2e8f0"/>
-            <circle cx="38" cy="55" r="1.6" fill="#0f172a"/>
-            <path d="M121 54 C130 48 134 56 126 58 C132 60 132 66 125 65" fill="none" stroke-width="1.8"/>
-            <line x1="96" y1="78" x2="94" y2="94" stroke-width="2"/>
+        11 => '<svg viewBox="0 0 180 130" role="img" aria-label="Pig">
+            <path d="M52 56 C64 38 108 36 130 50 C142 56 142 74 128 82 L126 108 L119 108 L119 84 C105 88 82 88 68 84 L64 108 L57 108 L59 82 L50 106 L43 106 L50 78 C41 75 36 71 29 71 L27 61 L39 59 C42 54 46 52 52 56 Z" fill="#ffffff"/>
+            <ellipse cx="28" cy="66" rx="3" ry="5" fill="#e2e8f0"/>
+            <path d="M56 52 C49 44 42 46 46 56" fill="#e2e8f0"/>
+            <circle cx="43" cy="60" r="1.8" fill="#0f172a" stroke="none"/>
+            <path d="M138 59 C149 52 153 62 144 64 C151 66 151 73 143 72" fill="none" stroke-width="2"/>
+            <line x1="110" y1="86" x2="108" y2="106" stroke-width="2.2"/>
         </svg>',
-        12 => '<svg viewBox="0 0 160 120" class="ace-detailed-svg">
-            <path d="M12 66 C22 76 42 74 62 66 L112 62 L146 52 L124 63 L146 65 L114 71 L64 76 C40 82 20 80 12 66 Z" fill="#f8fafc"/>
-            <polyline points="126,58 128,60 131,57 133,59 136,56 139,58 142,55" stroke-width="1.1"/>
-            <polyline points="126,65 129,63 132,65 135,63 138,65 141,63" stroke-width="1.1"/>
-            <path d="M68 75 L62 88 L70 88 L74 75" fill="#e2e8f0"/>
-            <path d="M102 71 L98 86 L106 86 L108 71" fill="#e2e8f0"/>
-            <path d="M24 69 L28 65 L32 68 L36 64 L40 67 L45 63 L50 66 L55 62 L60 66" stroke-width="1.3"/>
-            <line x1="65" y1="68" x2="108" y2="65" stroke-dasharray="4,3" stroke-width="1.3"/>
-            <circle cx="116" cy="59" r="1.5" fill="#0f172a"/>
+        12 => '<svg viewBox="0 0 180 130" role="img" aria-label="Crocodile">
+            <path d="M14 72 C26 84 48 82 72 72 L126 68 L166 56 L140 69 L166 72 L130 78 L74 84 C46 92 24 88 14 72 Z" fill="#f8fafc"/>
+            <polyline points="142,63 145,66 148,62 151,65 154,61 157,64 160,60" stroke-width="1.2"/>
+            <polyline points="142,72 146,69 149,72 153,69 156,72 160,69" stroke-width="1.2"/>
+            <path d="M78 83 L71 98 L81 98 L85 83" fill="#e2e8f0"/>
+            <path d="M116 78 L111 96 L121 96 L123 78" fill="#e2e8f0"/>
+            <path d="M28 76 L33 71 L38 75 L43 70 L48 74 L54 69 L60 73 L66 68 L72 72" stroke-width="1.5"/>
+            <line x1="74" y1="75" x2="122" y2="71" stroke-dasharray="5,3" stroke-width="1.4"/>
+            <circle cx="131" cy="64" r="1.8" fill="#0f172a" stroke="none"/>
         </svg>',
     ];
-    return isset($svgs[$index]) ? $svgs[$index] : '';
+
+    $fallback = $svgs[$idx] ?? '';
+    return ace_iii_render_diagram('pic_' . $idx, $fallback, $label, 'ace-real-img');
 }
 
 function ace_iii_get_fragmented_letter_svg($index)
 {
     $letters = [
-        1 => '<svg viewBox="0 0 120 120" class="ace-frag-svg"><g fill="#0f172a">
-            <rect x="28" y="18" width="8" height="14"/><rect x="28" y="42" width="8" height="16"/><rect x="28" y="68" width="8" height="12"/><rect x="28" y="90" width="8" height="12"/>
-            <rect x="78" y="20" width="9" height="9" transform="rotate(25 78 20)"/><rect x="62" y="36" width="10" height="8" transform="rotate(-35 62 36)"/><rect x="46" y="50" width="9" height="8"/>
-            <rect x="54" y="64" width="10" height="8" transform="rotate(35 54 64)"/><rect x="68" y="78" width="10" height="8" transform="rotate(35 68 78)"/><rect x="82" y="92" width="10" height="9"/>
-        </g></svg>',
-        2 => '<svg viewBox="0 0 120 120" class="ace-frag-svg"><g fill="#0f172a">
-            <rect x="20" y="20" width="8" height="14"/><rect x="20" y="46" width="8" height="14"/><rect x="20" y="72" width="8" height="12"/><rect x="20" y="92" width="8" height="10"/>
-            <rect x="32" y="28" width="8" height="12" transform="rotate(-28 32 28)"/><rect x="44" y="48" width="8" height="12" transform="rotate(-25 44 48)"/><rect x="56" y="66" width="8" height="10"/>
-            <rect x="68" y="48" width="8" height="12" transform="rotate(25 68 48)"/><rect x="78" y="28" width="8" height="12" transform="rotate(28 78 28)"/>
-            <rect x="92" y="20" width="8" height="14"/><rect x="92" y="48" width="8" height="14"/><rect x="92" y="74" width="8" height="12"/><rect x="92" y="92" width="8" height="10"/>
-        </g></svg>',
-        3 => '<svg viewBox="0 0 120 120" class="ace-frag-svg"><g fill="#0f172a">
-            <rect x="56" y="18" width="9" height="10"/><rect x="46" y="36" width="8" height="14" transform="rotate(20 46 36)"/><rect x="36" y="60" width="8" height="14" transform="rotate(20 36 60)"/><rect x="26" y="86" width="8" height="14" transform="rotate(20 26 86)"/>
-            <rect x="68" y="36" width="8" height="14" transform="rotate(-20 68 36)"/><rect x="78" y="60" width="8" height="14" transform="rotate(-20 78 60)"/><rect x="88" y="86" width="8" height="14" transform="rotate(-20 88 86)"/>
-            <rect x="44" y="66" width="12" height="7"/><rect x="64" y="66" width="12" height="7"/>
-        </g></svg>',
-        4 => '<svg viewBox="0 0 120 120" class="ace-frag-svg"><g fill="#0f172a">
-            <rect x="22" y="20" width="14" height="8"/><rect x="46" y="20" width="12" height="8"/><rect x="68" y="20" width="12" height="8"/><rect x="88" y="20" width="12" height="8"/>
-            <rect x="56" y="34" width="8" height="14"/><rect x="56" y="58" width="8" height="14"/><rect x="56" y="80" width="8" height="10"/><rect x="56" y="96" width="8" height="8"/>
-        </g></svg>',
+        // K
+        1 => '<svg viewBox="0 0 120 120" class="ace-frag-svg" role="img" aria-label="Fragmented letter 1">
+            <defs>
+                <mask id="aceFragMask1">
+                    <rect width="120" height="120" fill="#ffffff"/>
+                    <circle cx="32" cy="36" r="10" fill="#000"/>
+                    <circle cx="34" cy="74" r="11" fill="#000"/>
+                    <circle cx="62" cy="48" r="12" fill="#000"/>
+                    <circle cx="78" cy="28" r="9" fill="#000"/>
+                    <circle cx="68" cy="76" r="11" fill="#000"/>
+                    <circle cx="88" cy="96" r="8" fill="#000"/>
+                    <rect x="20" y="54" width="24" height="7" fill="#000"/>
+                </mask>
+            </defs>
+            <path d="M26 16 H40 V54 L76 16 H94 L56 58 L96 104 H78 L40 60 V104 H26 Z" fill="#0f172a" mask="url(#aceFragMask1)"/>
+        </svg>',
+        // M
+        2 => '<svg viewBox="0 0 120 120" class="ace-frag-svg" role="img" aria-label="Fragmented letter 2">
+            <defs>
+                <mask id="aceFragMask2">
+                    <rect width="120" height="120" fill="#ffffff"/>
+                    <circle cx="22" cy="42" r="11" fill="#000"/>
+                    <circle cx="24" cy="82" r="10" fill="#000"/>
+                    <circle cx="44" cy="46" r="11" fill="#000"/>
+                    <circle cx="60" cy="76" r="10" fill="#000"/>
+                    <circle cx="76" cy="44" r="11" fill="#000"/>
+                    <circle cx="98" cy="36" r="10" fill="#000"/>
+                    <circle cx="96" cy="78" r="11" fill="#000"/>
+                </mask>
+            </defs>
+            <path d="M16 104 V16 H32 L60 66 L88 16 H104 V104 H90 V40 L65 84 H55 L30 40 V104 Z" fill="#0f172a" mask="url(#aceFragMask2)"/>
+        </svg>',
+        // A
+        3 => '<svg viewBox="0 0 120 120" class="ace-frag-svg" role="img" aria-label="Fragmented letter 3">
+            <defs>
+                <mask id="aceFragMask3">
+                    <rect width="120" height="120" fill="#ffffff"/>
+                    <circle cx="60" cy="24" r="9" fill="#000"/>
+                    <circle cx="44" cy="52" r="11" fill="#000"/>
+                    <circle cx="78" cy="56" r="11" fill="#000"/>
+                    <circle cx="32" cy="86" r="10" fill="#000"/>
+                    <circle cx="88" cy="86" r="10" fill="#000"/>
+                    <circle cx="60" cy="74" r="9" fill="#000"/>
+                </mask>
+            </defs>
+            <path d="M52 16 H68 L100 104 H85 L77 80 H43 L35 104 H20 Z M47 68 H73 L60 30 Z" fill="#0f172a" fill-rule="evenodd" mask="url(#aceFragMask3)"/>
+        </svg>',
+        // T
+        4 => '<svg viewBox="0 0 120 120" class="ace-frag-svg" role="img" aria-label="Fragmented letter 4">
+            <defs>
+                <mask id="aceFragMask4">
+                    <rect width="120" height="120" fill="#ffffff"/>
+                    <circle cx="38" cy="22" r="10" fill="#000"/>
+                    <circle cx="82" cy="22" r="10" fill="#000"/>
+                    <circle cx="60" cy="48" r="11" fill="#000"/>
+                    <circle cx="60" cy="84" r="11" fill="#000"/>
+                    <rect x="50" y="64" width="20" height="8" fill="#000"/>
+                </mask>
+            </defs>
+            <path d="M18 16 H102 V30 H67 V104 H53 V30 H18 Z" fill="#0f172a" mask="url(#aceFragMask4)"/>
+        </svg>',
     ];
-    return isset($letters[$index]) ? $letters[$index] : '';
+
+    $fallback = isset($letters[$index]) ? $letters[$index] : '';
+    return ace_iii_render_diagram('letter_' . (int) $index, $fallback, 'Fragmented Letter ' . (int) $index, 'ace-real-img');
 }
 
 require 'layout/base.php';
@@ -867,8 +947,27 @@ require 'layout/base.php';
     .ace-role-patient .ace-inline-score,
     .ace-role-patient .ace-live-pill,
     .ace-role-patient .ace-score-range,
-    .ace-role-patient .ace-score-label {
+    .ace-role-patient .ace-score-label,
+    .ace-role-patient .ace-clock-reference {
         display: none !important;
+    }
+
+    .ace-real-img {
+        max-width: 100%;
+        max-height: 100%;
+        width: auto;
+        height: auto;
+        object-fit: contain;
+        display: block;
+    }
+
+    .ace-model-img {
+        max-width: 240px;
+        max-height: 130px;
+        width: auto;
+        height: auto;
+        object-fit: contain;
+        display: block;
     }
 
     .ace-sheet-banner {
@@ -1205,19 +1304,20 @@ require 'layout/base.php';
         gap: 8px;
     }
     .ace-pic-svg-wrap {
-        height: 92px;
+        height: 125px;
+        padding: 8px;
         display: flex;
         align-items: center;
         justify-content: center;
-        background: #f8fafc;
+        background: #ffffff;
         border: 1px solid var(--ace-soft-border);
         border-radius: 8px;
     }
     .ace-pic-svg-wrap svg {
-        width: 110px;
-        height: 82px;
+        width: 155px;
+        height: 108px;
         fill: none;
-        stroke: #1e293b;
+        stroke: #0f172a;
         stroke-width: 2.2;
         stroke-linecap: round;
         stroke-linejoin: round;
@@ -1318,6 +1418,7 @@ require 'layout/base.php';
     }
     .ace-frag-frame {
         height: 135px;
+        padding: 8px;
         border: 1px solid #cbd5e1;
         border-radius: 8px;
         display: flex;
@@ -1431,6 +1532,52 @@ require 'layout/base.php';
     }
     .ace-toast-error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
     .ace-toast-success { background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; }
+
+    .ace-recog-choices-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    margin-top: 10px;
+    margin-bottom: 14px;
+    font-size: 14.5px;
+    border: 1px solid var(--ace-border);
+    border-radius: 10px;
+    overflow: hidden;
+    background: #fff;
+    box-shadow: var(--ace-shadow-sm);
+}
+.ace-recog-choices-table td {
+    border-right: 1px solid var(--ace-border);
+    border-bottom: 1px solid var(--ace-border);
+    padding: 8px 12px;
+    vertical-align: middle;
+}
+.ace-recog-choices-table td:last-child {
+    border-right: none;
+    background: #f1f5f9;
+    width: 115px;
+    text-align: center;
+    font-weight: 700;
+    color: #334155;
+}
+.ace-recog-choices-table tbody tr:last-child td {
+    border-bottom: none;
+}
+.ace-recog-opt {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    cursor: pointer;
+    margin: 0;
+    font-weight: 600;
+    color: #1e293b;
+}
+.ace-recog-opt input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: var(--ace-primary);
+}
 
     @media (max-width: 960px) {
         .ace-demo-grid { grid-template-columns: 1fr; }
@@ -1868,7 +2015,7 @@ require 'layout/base.php';
                 </div>
             </div>
 
-            <!-- Picture Naming (Page 3 - 12 SVG Line Drawings) -->
+            <!-- Picture Naming (Page 3 - Exact Order pic_1 to pic_12) -->
             <div class="ace-domain-bar"><span>LANGUAGE</span></div>
             <div class="ace-split-row">
                 <div class="ace-split-left">
@@ -1951,16 +2098,22 @@ require 'layout/base.php';
                 <span class="ace-live-pill">Subtotal: <strong id="badge_visuospatial">0</strong> / 16</span>
             </div>
 
-            <!-- Infinity Diagram -->
+            <!-- Infinity Diagram (Exact Overlapping Loops Match) -->
             <div class="ace-split-row">
                 <div class="ace-split-left">
                     <p class="mb-2 fw-bold" style="font-size:13px;">&#10148; Infinity Diagram: Ask the subject to copy this diagram.</p>
                     <div class="ace-visuo-grid">
                         <div class="ace-stimulus-card">
                             <span>Infinity Diagram</span>
-                            <svg class="ace-model-svg" viewBox="0 0 360 110" role="img" aria-label="Infinity diagram to copy">
-                                <path d="M12 55 C12 10 68 10 112 55 C156 100 212 100 212 55 C212 10 156 10 112 55 C68 100 12 100 12 55 C12 10 68 10 112 55 C156 100 212 100 212 55 C212 10 268 10 312 55 C356 100 356 10 312 55" />
-                            </svg>
+                            <?php
+                            $infinity_svg = '<svg class="ace-model-svg" viewBox="0 0 360 120" role="img" aria-label="Overlapping infinity loops diagram to copy">
+                                <path d="M 20,60 C 20,12 76,12 110,60 C 144,108 200,108 200,60 C 200,12 144,12 110,60 C 76,108 20,108 20,60 Z"
+                                      fill="none" stroke="#0f172a" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" />
+                                <path d="M 160,60 C 160,12 216,12 250,60 C 284,108 340,108 340,60 C 340,12 284,12 250,60 C 216,108 160,108 160,60 Z"
+                                      fill="none" stroke="#0f172a" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" />
+                            </svg>';
+                            echo ace_iii_render_diagram('infinity', $infinity_svg, 'Overlapping Infinity Diagram');
+                            ?>
                         </div>
                         <div class="ace-canvas-card">
                             <div class="ace-canvas-bar">
@@ -1977,21 +2130,26 @@ require 'layout/base.php';
                 </div>
             </div>
 
-            <!-- Wire Cube -->
+            <!-- Wire Cube (Accurate 3D Necker Cube) -->
             <div class="ace-split-row">
                 <div class="ace-split-left">
                     <p class="mb-2 fw-bold" style="font-size:13px;">&#10148; Wire cube: Ask the subject to copy this drawing (for scoring, see instructions guide).</p>
                     <div class="ace-visuo-grid">
                         <div class="ace-stimulus-card">
                             <span>Wire Cube</span>
-                            <svg class="ace-model-svg" viewBox="0 0 220 130" role="img" aria-label="Wire cube to copy">
-                                <rect x="30" y="36" width="95" height="72" />
-                                <rect x="75" y="14" width="95" height="72" />
-                                <line x1="30" y1="36" x2="75" y2="14" />
-                                <line x1="125" y1="36" x2="170" y2="14" />
-                                <line x1="30" y1="108" x2="75" y2="86" />
-                                <line x1="125" y1="108" x2="170" y2="86" />
-                            </svg>
+                            <?php
+                            $cube_svg = '<svg class="ace-model-svg" viewBox="0 0 220 160" role="img" aria-label="Wire cube to copy">
+                                <g fill="none" stroke="#0f172a" stroke-width="3.5" stroke-linejoin="miter" stroke-linecap="square">
+                                    <rect x="42" y="54" width="90" height="90" />
+                                    <rect x="88" y="16" width="90" height="90" />
+                                    <line x1="42" y1="54" x2="88" y2="16" />
+                                    <line x1="132" y1="54" x2="178" y2="16" />
+                                    <line x1="42" y1="144" x2="88" y2="106" />
+                                    <line x1="132" y1="144" x2="178" y2="106" />
+                                </g>
+                            </svg>';
+                            echo ace_iii_render_diagram('cube', $cube_svg, 'Wire Cube');
+                            ?>
                         </div>
                         <div class="ace-canvas-card">
                             <div class="ace-canvas-bar">
@@ -2013,7 +2171,7 @@ require 'layout/base.php';
                 <div class="ace-split-left">
                     <p class="mb-2 fw-bold" style="font-size:13px;">&#10148; Clock: Ask the subject to draw a clock face with numbers and the hands at ten past five. (For scoring see instruction guide: circle = 1, numbers = 2, hands = 2 if all correct).</p>
                     <div class="ace-visuo-grid">
-                        <div class="ace-stimulus-card">
+                        <div class="ace-stimulus-card ace-clock-reference">
                             <span>Reference Clock (10 Past 5)</span>
                             <svg class="ace-model-svg" viewBox="0 0 140 140" role="img" aria-label="Reference clock diagram at ten past five">
                                 <circle cx="70" cy="70" r="56" />
@@ -2151,6 +2309,46 @@ require 'layout/base.php';
             <div class="ace-split-row">
                 <div class="ace-split-left">
                     <p class="mb-2" style="font-size:12.5px;">&#10148; This test should be done if the subject failed to recall one or more items above. If all items were recalled, skip the test and score 5. If only part was recalled start by ticking items recalled in the shadowed column on the right hand side; and then test not recalled items by telling the subject "ok, I'll give you some hints: was the name X, Y or Z?" and so on. Each recognised item scores one point, which is added to the point gained by recalling.</p>
+                    <?php
+$recognition_rows = [
+    'recog_name'   => ['Sunil Kumar Sharma', 'Sunil Kumar Singh', 'Rakesh Yadav'],
+    'recog_number' => ['25', '52', '37'],
+    'recog_street' => ['Market Road', 'Sastri Marg', 'Station Road'],
+    'recog_area'   => ['Prakash Nagar', 'Gandhi Nagar', 'Patel Nagar'],
+    'recog_city'   => ['Allahabad', 'Gwalior', 'Indore'],
+];
+?>
+<div class="table-responsive">
+    <table class="ace-recog-choices-table">
+        <tbody>
+            <?php foreach ($recognition_rows as $r_key => $options): ?>
+                <tr>
+                    <?php foreach ($options as $o_idx => $opt_label):
+                        $opt_name = 'answers[' . $r_key . '_opt_' . ($o_idx + 1) . ']';
+                        $is_checked = !empty($answers[$r_key . '_opt_' . ($o_idx + 1)]);
+                    ?>
+                        <td>
+                            <label class="ace-recog-opt">
+                                <input type="checkbox" name="<?php echo ace_iii_escape($opt_name); ?>" value="1" <?php echo $is_checked ? 'checked' : ''; ?>>
+                                <span><?php echo ace_iii_escape($opt_label); ?></span>
+                            </label>
+                        </td>
+                    <?php endforeach; ?>
+                    <td>
+                        <?php
+                        $rec_name = 'answers[' . $r_key . '_recalled]';
+                        $is_recalled = !empty($answers[$r_key . '_recalled']);
+                        ?>
+                        <label class="ace-recog-opt justify-content-center">
+                            <input type="checkbox" name="<?php echo ace_iii_escape($rec_name); ?>" value="1" <?php echo $is_recalled ? 'checked' : ''; ?>>
+                            <span>recalled</span>
+                        </label>
+                    </td>
+                </tr>
+            <?php endforeach; ?>
+        </tbody>
+    </table>
+</div>
                     <div class="table-responsive mb-3">
                         <table class="ace-recog-table">
                             <tbody>
