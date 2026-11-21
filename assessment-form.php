@@ -275,24 +275,35 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $response_saved = false;
 
         if ($stmt = $conn->prepare($sql)) {
-            $stmt->bind_param(
-                "iiiisssssiss",
-                $patient_id,
-                $assignment_id,
-                $course_id,
-                $lesson_id,
-                $user_name,
-                $user_email,
-                $user_mobile,
-                $assessment_date,
-                $total_score,
-                $status_text,
-                $json_results
-            );
 
-            $response_saved = $stmt->execute();
-            $stmt->close();
-        }
+    $json_results = json_encode($results, JSON_UNESCAPED_UNICODE);
+
+    $stmt->bind_param(
+        "iiiissssiss",
+        $patient_id,
+        $assignment_id,
+        $course_id,
+        $lesson_id,
+        $user_name,
+        $user_email,
+        $user_mobile,
+        $assessment_date,
+        $total_score,
+        $status_text,
+        $json_results
+    );
+
+    $response_saved = $stmt->execute();
+
+    if (!$response_saved) {
+        error_log("Assessment insert error: " . $stmt->error);
+    }
+
+    $stmt->close();
+
+} else {
+    error_log("Assessment prepare error: " . $conn->error);
+}
 
         /*
          * Module 1 assignment record sync.
