@@ -76,6 +76,7 @@ if ($assessment_id === false || $assessment_id < 1) {
 
 $patient_name = '';
 $clinician_name = '';
+$formatted_date = '—';
 $notes = '';
 $domain_scores = [];
 $all_scores = [];
@@ -95,23 +96,47 @@ if ($record) {
 
     $decoded_demo = json_decode((string) ($record['demographic_data'] ?? ''), true);
     $normalized_demo = assessment_demographics_normalize(is_array($decoded_demo) ? $decoded_demo : []);
-    foreach ($normalized_demo as $key => $val) {
-        if ($key === 'client_name') {
-            continue;
-        }
-        $val_str = is_array($val) ? implode(', ', array_filter($val)) : trim((string) $val);
 
-        if ($key === 'date') {
-            $label = 'Date';
-            if ($val_str !== '' && strtotime($val_str) !== false) {
-                $val_str = date('d M Y', strtotime($val_str));
+    $get_demo = static function (array $keys) use ($normalized_demo): string {
+        foreach ($keys as $k) {
+            if (!isset($normalized_demo[$k])) {
+                continue;
             }
-        } else {
-            $label = ucwords(str_replace('_', ' ', (string) $key));
+            $v = $normalized_demo[$k];
+            $str = is_array($v) ? implode(', ', array_filter($v)) : trim((string) $v);
+            if ($str !== '') {
+                return $str;
+            }
         }
+        return '—';
+    };
 
-        $demographics_list[$label] = $val_str !== '' ? $val_str : '—';
+    $raw_date = $get_demo(['date']);
+    $formatted_date = $raw_date !== '—' && strtotime($raw_date) !== false
+        ? date('d M Y', strtotime($raw_date))
+        : (!empty($record['assessment_date']) ? date('d M Y', strtotime($record['assessment_date'])) : '—');
+
+    $age_val = $get_demo(['age']);
+    $gender_val = $get_demo(['gender', 'sex']);
+    $age_gender_combined = $get_demo(['age_gender', 'age_/_gender']);
+    if ($age_gender_combined === '—') {
+        $parts = array_filter([$age_val !== '—' ? $age_val : '', $gender_val !== '—' ? $gender_val : '']);
+        $age_gender_combined = !empty($parts) ? implode(' / ', $parts) : '—';
     }
+
+    // Exact 2-Column Header Order (Client Name first from dropdown, followed by client's exact sequence)
+    $demographics_list = [
+        'Client Name'             => $patient_name,
+        'Date'                    => $formatted_date,
+        'UHID'                    => $get_demo(['uhid']),
+        'Age / Gender'            => $age_gender_combined,
+        'Contact No'              => $get_demo(['contact_no', 'contact_number', 'phone']),
+        'Email ID'                => $get_demo(['email_id', 'email']),
+        'Caregiver Name'          => $get_demo(['caregiver_name']),
+        'Contact No of Caregiver' => $get_demo(['contact_no_of_caregiver', 'caregiver_contact', 'caregiver_contact_no']),
+        'Consultant'              => $get_demo(['consultant']),
+        'Evaluating Professional' => $clinician_name,
+    ];
 
     foreach ($panss_sections as $prefix => $section) {
         if ($prefix === 'P') {
@@ -219,7 +244,7 @@ require 'layout/base.php';
         transform: translateY(-1px);
     }
 
-    /* Executive Hero Banner (with Integrated Demographics) */
+    /* Executive Hero Banner (with Integrated 2-Column Demographics) */
     .report-hero {
         position: relative;
         overflow: hidden;
@@ -299,73 +324,43 @@ require 'layout/base.php';
         white-space: nowrap;
     }
 
-    .report-meta {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 12px;
-        margin-top: 20px;
-        position: relative;
-        z-index: 1;
-    }
-
-    .meta-box {
-        background: rgba(255, 255, 255, 0.12);
-        border: 1px solid rgba(255, 255, 255, 0.18);
-        border-radius: 10px;
-        padding: 10px 14px;
-    }
-
-    .meta-box span {
-        display: block;
-        font-size: 10.5px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        color: #ccfbf1;
-    }
-
-    .meta-box strong {
-        display: block;
-        margin-top: 3px;
-        font-size: 14px;
-        font-weight: 700;
-        color: #fff;
-    }
-
-    /* Integrated Demographics Inside Hero */
+    /* Integrated 2-Column Demographics Inside Hero */
     .hero-demo-wrap {
-        margin-top: 14px;
-        padding-top: 14px;
-        border-top: 1px solid rgba(255, 255, 255, 0.16);
+        margin-top: 18px;
+        padding-top: 16px;
+        border-top: 1px solid rgba(255, 255, 255, 0.18);
         position: relative;
         z-index: 1;
     }
 
     .hero-demo-title {
-        font-size: 10px;
+        font-size: 10.5px;
         font-weight: 800;
         text-transform: uppercase;
         letter-spacing: 0.09em;
         color: #99f6e4;
-        margin-bottom: 10px;
+        margin-bottom: 11px;
     }
 
     .hero-demo-grid {
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 9px 12px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px 14px;
     }
 
     .hero-demo-item {
-        background: rgba(255, 255, 255, 0.09);
-        border: 1px solid rgba(255, 255, 255, 0.15);
-        border-radius: 8px;
-        padding: 7px 11px;
+        background: rgba(255, 255, 255, 0.10);
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        border-radius: 9px;
+        padding: 8px 13px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
     }
 
     .hero-demo-item span {
         display: block;
-        font-size: 9.5px;
+        font-size: 10px;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.05em;
@@ -376,7 +371,7 @@ require 'layout/base.php';
     .hero-demo-item strong {
         display: block;
         margin-top: 2px;
-        font-size: 12.5px;
+        font-size: 13.5px;
         font-weight: 700;
         color: #fff;
         overflow-wrap: anywhere;
@@ -564,8 +559,14 @@ require 'layout/base.php';
     }
 
     /* Composite & Combined Score Highlight Boxes */
-    .composite-box {
+    .index-summary-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 10px;
         margin-top: 16px;
+    }
+
+    .composite-box {
         padding: 13px 16px;
         border-radius: 12px;
         background: #f8fafc;
@@ -576,14 +577,11 @@ require 'layout/base.php';
         gap: 14px;
     }
 
-    .combined-score-box {
-        margin-top: 10px;
-    }
-
     .composite-left {
         display: flex;
         align-items: center;
         gap: 12px;
+        min-width: 0;
     }
 
     .composite-icon {
@@ -619,6 +617,7 @@ require 'layout/base.php';
         font-weight: 900;
         text-align: center;
         color: var(--pr-text);
+        flex-shrink: 0;
     }
 
     .composite-val.is-positive {
@@ -840,7 +839,6 @@ require 'layout/base.php';
 
     @media (max-width: 1024px) {
         .panss-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-        .hero-demo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .overview-stack,
         .pn-grid,
         .item-list-2col { grid-template-columns: 1fr; }
@@ -849,8 +847,8 @@ require 'layout/base.php';
     @media (max-width: 700px) {
         .panss-report { padding: 16px 12px 32px; }
         .report-hero { padding: 20px 18px; }
-        .report-meta { grid-template-columns: 1fr; }
         .hero-right { align-items: flex-start; }
+        .hero-demo-grid { grid-template-columns: 1fr; }
         .item-row { grid-template-columns: minmax(0, 1fr) auto; }
         .item-track { display: none; }
         .report-sign-footer {
@@ -864,11 +862,10 @@ require 'layout/base.php';
     }
 
     @media (max-width: 480px) {
-        .panss-kpi-grid,
-        .hero-demo-grid { grid-template-columns: 1fr; }
+        .panss-kpi-grid { grid-template-columns: 1fr; }
     }
 
-    /* PRINT LAYOUT: Removes browser URL/date headers via @page margin: 0 */
+    /* PRINT LAYOUT: Strictly 2 Pages (Page 1 = Overview + 2-Col Demographics, Page 2 = Item Ratings + Signature) */
     @page {
         size: A4 portrait;
         margin: 0;
@@ -891,13 +888,13 @@ require 'layout/base.php';
         }
         .panss-report {
             max-width: 100% !important;
-            padding: 9mm 10mm !important;
+            padding: 8mm 10mm !important;
             margin: 0 !important;
         }
 
-        /* Balanced Full-Page 1 Fit */
+        /* ========== PAGE 1: BALANCED FULL FIT WITHOUT OVERFLOW ========== */
         .report-hero {
-            padding: 15px 18px !important;
+            padding: 15px 19px !important;
             border-radius: 12px !important;
             box-shadow: none !important;
             break-inside: avoid;
@@ -914,39 +911,26 @@ require 'layout/base.php';
         .report-subtitle {
             font-size: 11px !important;
         }
-        .report-meta {
-            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-            gap: 8px !important;
-            margin-top: 11px !important;
-        }
-        .meta-box {
-            padding: 6px 10px !important;
-        }
-        .meta-box span {
-            font-size: 8.5px !important;
-        }
-        .meta-box strong {
-            font-size: 12px !important;
-        }
         .hero-demo-wrap {
-            margin-top: 10px !important;
+            margin-top: 11px !important;
             padding-top: 9px !important;
         }
         .hero-demo-title {
-            margin-bottom: 6px !important;
+            margin-bottom: 7px !important;
+            font-size: 9.5px !important;
         }
         .hero-demo-grid {
-            grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-            gap: 6px 8px !important;
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 6px 12px !important;
         }
         .hero-demo-item {
-            padding: 5px 9px !important;
+            padding: 5px 10px !important;
         }
         .hero-demo-item span {
-            font-size: 8px !important;
+            font-size: 8.5px !important;
         }
         .hero-demo-item strong {
-            font-size: 10.5px !important;
+            font-size: 11.5px !important;
         }
 
         /* 4 KPI cards in 1 single row */
@@ -982,7 +966,7 @@ require 'layout/base.php';
         .score-chart-wrap {
             width: 560px !important;
             max-width: 100% !important;
-            height: 225px !important;
+            height: 235px !important;
             margin: 0 auto !important;
             display: flex !important;
             justify-content: center !important;
@@ -993,7 +977,7 @@ require 'layout/base.php';
             display: block !important;
         }
         .chart-legend-custom {
-            margin-top: 10px !important;
+            margin-top: 8px !important;
             font-size: 11px !important;
         }
 
@@ -1018,70 +1002,99 @@ require 'layout/base.php';
             font-size: 11.5px !important;
         }
         .card-body-pad {
-            padding: 12px 16px !important;
-        }
-        .composite-box {
-            margin-top: 11px !important;
-            padding: 9px 14px !important;
-        }
-        .combined-score-box {
-            margin-top: 8px !important;
-        }
-        .composite-val {
-            font-size: 18px !important;
-            padding: 5px 11px !important;
-        }
-        .composite-val.is-combined span {
-            font-size: 11.5px !important;
+            padding: 11px 16px !important;
         }
 
-        /* Start Item-Level Ratings cleanly on Page 2 with top margin */
+        /* Composite Index & Combined Score Side-by-Side on Page 1 */
+        .index-summary-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 10px !important;
+            margin-top: 11px !important;
+        }
+        .composite-box {
+            padding: 9px 12px !important;
+            gap: 8px !important;
+            break-inside: avoid;
+            page-break-inside: avoid;
+        }
+        .composite-icon {
+            width: 32px !important;
+            height: 32px !important;
+            font-size: 15px !important;
+        }
+        .composite-title {
+            font-size: 12px !important;
+        }
+        .composite-formula {
+            font-size: 10px !important;
+        }
+        .composite-val {
+            min-width: 60px !important;
+            font-size: 17px !important;
+            padding: 4px 9px !important;
+        }
+        .composite-val.is-combined span {
+            font-size: 11px !important;
+        }
+
+        /* ========== PAGE 2: ITEM-LEVEL RATINGS + NOTES + SIGNATURE ========== */
         .print-page-break {
             break-before: page !important;
             page-break-before: always !important;
             margin-top: 0 !important;
-            padding-top: 9mm !important;
-            margin-bottom: 10px !important;
+            padding-top: 8mm !important;
+            margin-bottom: 12px !important;
+        }
+        .print-page-break h2 {
+            font-size: 15px !important;
         }
 
         .pn-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-            gap: 10px !important;
-            margin-bottom: 10px !important;
+            gap: 12px !important;
+            margin-bottom: 12px !important;
         }
         .item-list {
-            gap: 5px !important;
+            gap: 6px !important;
         }
         .item-list-2col {
             grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-            gap: 5px 16px !important;
+            gap: 6px 18px !important;
         }
         .item-row {
-            grid-template-columns: minmax(0, 1fr) 55px auto !important;
+            grid-template-columns: minmax(0, 1fr) 58px auto !important;
             gap: 8px !important;
-            padding-bottom: 5px !important;
+            padding-bottom: 6px !important;
             break-inside: avoid;
             page-break-inside: avoid;
         }
         .item-code {
-            min-width: 24px !important;
-            height: 19px !important;
+            min-width: 25px !important;
+            height: 20px !important;
             font-size: 9.5px !important;
         }
         .item-label {
-            font-size: 10.5px !important;
+            font-size: 11px !important;
             white-space: normal !important;
         }
         .rating-pill {
             font-size: 9.5px !important;
-            padding: 1px 6px !important;
+            padding: 1.5px 6px !important;
         }
         .rating-text {
             font-size: 9px !important;
         }
+        .notes-card {
+            margin-top: 12px !important;
+        }
+        .clinical-notes {
+            padding: 10px 12px !important;
+            font-size: 11px !important;
+            line-height: 1.45 !important;
+        }
         .report-sign-footer {
-            margin-top: 18px !important;
-            padding-top: 14px !important;
+            margin-top: 22px !important;
+            padding-top: 12px !important;
         }
         .report-sign-line {
             margin-top: 34px !important;
@@ -1113,7 +1126,7 @@ require 'layout/base.php';
             <p class="mb-0"><?php echo panss_score_escape($load_error); ?></p>
         </section>
     <?php else: ?>
-        <!-- HERO HEADER WITH INTEGRATED DEMOGRAPHIC DETAILS -->
+        <!-- HERO HEADER WITH 2-COLUMN CLIENT & CLINICAL DETAILS -->
         <header class="report-hero">
             <div class="hero-top">
                 <div>
@@ -1124,39 +1137,22 @@ require 'layout/base.php';
                 <div class="hero-right">
                     <span class="hero-total-pill">
                         <i class="bi bi-calendar3" aria-hidden="true"></i>
-                        Date: <?php echo panss_score_escape(date('d M Y', strtotime($record['assessment_date']))); ?>
+                        Date: <?php echo panss_score_escape($formatted_date); ?>
                     </span>
                 </div>
             </div>
 
-            <div class="report-meta">
-                <div class="meta-box">
-                    <span>Patient Name</span>
-                    <strong><?php echo panss_score_escape($patient_name); ?></strong>
-                </div>
-                <div class="meta-box">
-                    <span>Assessment Date</span>
-                    <strong><?php echo panss_score_escape(date('d M Y', strtotime($record['assessment_date']))); ?></strong>
-                </div>
-                <div class="meta-box">
-                    <span>Evaluating Clinician</span>
-                    <strong><?php echo panss_score_escape($clinician_name); ?></strong>
+            <div class="hero-demo-wrap">
+                <div class="hero-demo-title">Patient &amp; Clinical Details</div>
+                <div class="hero-demo-grid">
+                    <?php foreach ($demographics_list as $demo_label => $demo_value): ?>
+                        <div class="hero-demo-item">
+                            <span><?php echo panss_score_escape($demo_label); ?></span>
+                            <strong><?php echo panss_score_escape($demo_value); ?></strong>
+                        </div>
+                    <?php endforeach; ?>
                 </div>
             </div>
-
-            <?php if (!empty($demographics_list)): ?>
-                <div class="hero-demo-wrap">
-                    <div class="hero-demo-title">Patient Demographic Details</div>
-                    <div class="hero-demo-grid">
-                        <?php foreach ($demographics_list as $demo_label => $demo_value): ?>
-                            <div class="hero-demo-item">
-                                <span><?php echo panss_score_escape($demo_label); ?></span>
-                                <strong><?php echo panss_score_escape($demo_value); ?></strong>
-                            </div>
-                        <?php endforeach; ?>
-                    </div>
-                </div>
-            <?php endif; ?>
         </header>
 
         <!-- 4-COLUMN SUBSCALE KPI STRIP -->
@@ -1239,29 +1235,31 @@ require 'layout/base.php';
                         <?php endforeach; ?>
                     </div>
 
-                    <div class="composite-box" role="group" aria-label="Composite score <?php echo $composite_score; ?>">
-                        <div class="composite-left">
-                            <span class="composite-icon" aria-hidden="true"><i class="bi bi-calculator"></i></span>
-                            <div>
-                                <div class="composite-title">Composite Index</div>
-                                <div class="composite-formula">Positive Scale (<?php echo (int) $record['positive_score']; ?>) &minus; Negative Scale (<?php echo (int) $record['negative_score']; ?>)</div>
+                    <div class="index-summary-grid">
+                        <div class="composite-box" role="group" aria-label="Composite score <?php echo $composite_score; ?>">
+                            <div class="composite-left">
+                                <span class="composite-icon" aria-hidden="true"><i class="bi bi-calculator"></i></span>
+                                <div>
+                                    <div class="composite-title">Composite Index</div>
+                                    <div class="composite-formula">Positive (<?php echo (int) $record['positive_score']; ?>) &minus; Negative (<?php echo (int) $record['negative_score']; ?>)</div>
+                                </div>
+                            </div>
+                            <div class="composite-val <?php echo $composite_score < 0 ? 'is-negative' : ($composite_score > 0 ? 'is-positive' : ''); ?>">
+                                <?php echo $composite_score > 0 ? '+' : ''; ?><?php echo $composite_score; ?>
                             </div>
                         </div>
-                        <div class="composite-val <?php echo $composite_score < 0 ? 'is-negative' : ($composite_score > 0 ? 'is-positive' : ''); ?>">
-                            <?php echo $composite_score > 0 ? '+' : ''; ?><?php echo $composite_score; ?>
-                        </div>
-                    </div>
 
-                    <div class="composite-box combined-score-box" role="group" aria-label="Combined score <?php echo (int) $combined_total; ?> out of 210">
-                        <div class="composite-left">
-                            <span class="composite-icon" aria-hidden="true"><i class="bi bi-clipboard2-pulse"></i></span>
-                            <div>
-                                <div class="composite-title">Combined Score</div>
-                                <div class="composite-formula">Positive (<?php echo (int) $record['positive_score']; ?>) + Negative (<?php echo (int) $record['negative_score']; ?>) + General (<?php echo (int) $record['general_score']; ?>)</div>
+                        <div class="composite-box" role="group" aria-label="Combined score <?php echo (int) $combined_total; ?> out of 210">
+                            <div class="composite-left">
+                                <span class="composite-icon" aria-hidden="true"><i class="bi bi-clipboard2-pulse"></i></span>
+                                <div>
+                                    <div class="composite-title">Combined Score</div>
+                                    <div class="composite-formula">P (<?php echo (int) $record['positive_score']; ?>) + N (<?php echo (int) $record['negative_score']; ?>) + G (<?php echo (int) $record['general_score']; ?>)</div>
+                                </div>
                             </div>
-                        </div>
-                        <div class="composite-val is-combined">
-                            <?php echo (int) $combined_total; ?><span> / 210</span>
+                            <div class="composite-val is-combined">
+                                <?php echo (int) $combined_total; ?><span> / 210</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1486,9 +1484,8 @@ require 'layout/base.php';
             plugins: [sliceCalloutAndCenter]
         });
 
-        // Print me exact centered size force karega
         window.addEventListener('beforeprint', function () {
-            panssChart.resize(560, 225);
+            panssChart.resize(560, 235);
         });
         window.addEventListener('afterprint', function () {
             panssChart.resize();

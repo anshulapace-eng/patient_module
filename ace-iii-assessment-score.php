@@ -102,6 +102,7 @@ if ($assessment_id === false || $assessment_id < 1) {
 
 $patient_name = '';
 $clinician_name = '';
+$formatted_date = '—';
 $notes = '';
 $answers = [];
 $score_data = [];
@@ -138,14 +139,52 @@ if ($record) {
         $demo_decoded = is_array($details_decoded['_demographics'] ?? null) ? $details_decoded['_demographics'] : [];
     }
     $normalized_demo = assessment_demographics_normalize(is_array($demo_decoded) ? $demo_decoded : []);
-    foreach ($normalized_demo as $dk => $dv) {
-        if (in_array($dk, ['date', 'client_name'], true)) {
-            continue;
+
+    $get_demo = static function (array $keys) use ($normalized_demo): string {
+        foreach ($keys as $k) {
+            if (!isset($normalized_demo[$k])) {
+                continue;
+            }
+            $v = $normalized_demo[$k];
+            $str = is_array($v) ? implode(', ', array_filter($v)) : trim((string) $v);
+            if ($str !== '') {
+                return $str;
+            }
         }
-        $val_str = is_array($dv) ? implode(', ', array_filter($dv)) : trim((string) $dv);
-        $label = ucwords(str_replace('_', ' ', (string) $dk));
-        $demographics[$label] = $val_str !== '' ? $val_str : '—';
+        return '—';
+    };
+
+    $raw_date = $get_demo(['date']);
+    $formatted_date = $raw_date !== '—' && strtotime($raw_date) !== false
+        ? date('d M Y', strtotime($raw_date))
+        : (!empty($record['assessment_date']) ? date('d M Y', strtotime($record['assessment_date'])) : '—');
+
+    $age_val = $get_demo(['age']);
+    $gender_val = $get_demo(['gender', 'sex']);
+    $age_gender_combined = $get_demo(['age_gender', 'age_/_gender']);
+    if ($age_gender_combined === '—') {
+        $parts = array_filter([$age_val !== '—' ? $age_val : '', $gender_val !== '—' ? $gender_val : '']);
+        $age_gender_combined = !empty($parts) ? implode(' / ', $parts) : '—';
     }
+
+    $evaluating_prof = $get_demo(['evaluating_professional']);
+    if ($evaluating_prof === '—') {
+        $evaluating_prof = $clinician_name;
+    }
+
+    // Exact 2-Column Header Order (Client Name first from dropdown, followed by exact sequence)
+    $demographics = [
+        'Client Name'             => $patient_name,
+        'Date'                    => $formatted_date,
+        'UHID'                    => $get_demo(['uhid']),
+        'Age / Gender'            => $age_gender_combined,
+        'Contact No'              => $get_demo(['contact_no', 'contact_number', 'phone']),
+        'Email ID'                => $get_demo(['email_id', 'email']),
+        'Caregiver Name'          => $get_demo(['caregiver_name']),
+        'Contact No of Caregiver' => $get_demo(['contact_no_of_caregiver', 'caregiver_contact', 'caregiver_contact_no']),
+        'Consultant'              => $get_demo(['consultant']),
+        'Evaluating Professional' => $evaluating_prof,
+    ];
 
     foreach ($section_scores as $section) {
         $chart_labels[] = $section['label'];
@@ -242,22 +281,22 @@ require 'layout/base.php';
         transform: translateY(-1px);
     }
 
-    /* Hero Banner */
+    /* Hero Banner (with Integrated 2-Column Demographics) */
     .report-hero {
         position: relative;
         overflow: hidden;
-        padding: 28px 30px;
+        padding: 26px 28px;
         border-radius: 16px;
-        background: linear-gradient(135deg, #0f3f3c 0%, #0f766e 55%, #0ea5e9 100%);
+        background: linear-gradient(135deg, #0f3f3c 0%, #0f766e 55%, #0891b2 100%);
         color: #fff;
-        box-shadow: 0 14px 32px -8px rgba(15, 118, 110, 0.3);
+        box-shadow: 0 14px 32px -8px rgba(15, 118, 110, 0.32);
     }
 
     .report-hero::after {
         content: "";
         position: absolute;
-        top: -80px;
-        right: -60px;
+        top: -70px;
+        right: -50px;
         width: 260px;
         height: 260px;
         border-radius: 50%;
@@ -280,23 +319,23 @@ require 'layout/base.php';
         padding: 4px 11px;
         border-radius: 999px;
         background: rgba(255, 255, 255, 0.14);
-        color: #e0f2fe;
+        color: #ccfbf1;
         font-size: 11px;
         font-weight: 800;
         letter-spacing: 0.08em;
         text-transform: uppercase;
-        margin-bottom: 10px;
+        margin-bottom: 8px;
     }
 
     .report-hero h1 {
         margin: 0;
-        font-size: clamp(24px, 3.5vw, 32px);
+        font-size: clamp(24px, 3.5vw, 31px);
         font-weight: 800;
         letter-spacing: -0.02em;
     }
 
     .report-subtitle {
-        margin: 6px 0 0;
+        margin: 5px 0 0;
         color: #ccfbf1;
         font-size: 13.5px;
     }
@@ -322,37 +361,71 @@ require 'layout/base.php';
     .status-badge.borderline { background: #fef3c7; color: #92400e; }
     .status-badge.abnormal { background: #fee2e2; color: #991b1b; }
 
-    .report-meta {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 12px;
-        margin-top: 22px;
+    .hero-date-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 13px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.18);
+        border: 1px solid rgba(255, 255, 255, 0.28);
+        color: #fff;
+        font-size: 12.5px;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    /* Integrated 2-Column Demographics Inside Hero */
+    .hero-demo-wrap {
+        margin-top: 18px;
+        padding-top: 16px;
+        border-top: 1px solid rgba(255, 255, 255, 0.18);
         position: relative;
         z-index: 1;
     }
 
-    .meta-box {
-        background: rgba(255, 255, 255, 0.12);
-        border: 1px solid rgba(255, 255, 255, 0.18);
-        border-radius: 10px;
-        padding: 11px 14px;
+    .hero-demo-title {
+        font-size: 10.5px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.09em;
+        color: #99f6e4;
+        margin-bottom: 11px;
     }
 
-    .meta-box span {
+    .hero-demo-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px 14px;
+    }
+
+    .hero-demo-item {
+        background: rgba(255, 255, 255, 0.10);
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        border-radius: 9px;
+        padding: 8px 13px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+
+    .hero-demo-item span {
         display: block;
-        font-size: 10.5px;
+        font-size: 10px;
         font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: 0.06em;
+        letter-spacing: 0.05em;
         color: #ccfbf1;
+        opacity: 0.9;
     }
 
-    .meta-box strong {
+    .hero-demo-item strong {
         display: block;
-        margin-top: 4px;
-        font-size: 14.5px;
+        margin-top: 2px;
+        font-size: 13.5px;
         font-weight: 700;
         color: #fff;
+        overflow-wrap: anywhere;
     }
 
     /* Summary Grid */
@@ -525,37 +598,6 @@ require 'layout/base.php';
         font-size: 11px;
         font-weight: 600;
         color: var(--ar-muted);
-    }
-
-    /* Demographics Grid */
-    .demo-grid {
-        display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 12px;
-    }
-
-    .demo-item {
-        background: #f8fafc;
-        border: 1px solid var(--ar-border-soft);
-        border-radius: 10px;
-        padding: 10px 14px;
-    }
-
-    .demo-item span {
-        display: block;
-        font-size: 10.5px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-        color: var(--ar-muted);
-    }
-
-    .demo-item strong {
-        display: block;
-        margin-top: 3px;
-        font-size: 13.5px;
-        color: var(--ar-text);
-        overflow-wrap: anywhere;
     }
 
     /* Section Divider Title */
@@ -852,13 +894,17 @@ require 'layout/base.php';
     }
 
     @media (max-width: 900px) {
-        .report-meta,
         .drawings-grid {
             grid-template-columns: 1fr;
         }
-        .demo-grid,
         .naming-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+
+    @media (max-width: 700px) {
+        .hero-demo-grid {
+            grid-template-columns: 1fr;
         }
     }
 
@@ -866,7 +912,6 @@ require 'layout/base.php';
         .score-report { padding: 16px 12px 32px; }
         .report-hero { padding: 20px 18px; }
         .hero-right { align-items: flex-start; }
-        .demo-grid,
         .naming-grid { grid-template-columns: 1fr; }
         .section-row { grid-template-columns: 110px minmax(0, 1fr) 82px; gap: 10px; }
         .kv-row { flex-direction: column; align-items: flex-start; }
@@ -880,11 +925,20 @@ require 'layout/base.php';
         }
     }
 
+    /* PRINT RESPONSIVE LAYOUT (Removes browser URL/date & fits cleanly on A4) */
+    @page {
+        size: A4 portrait;
+        margin: 0;
+    }
+
     @media print {
+        html,
         body {
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
             background: #fff !important;
+            margin: 0 !important;
+            padding: 0 !important;
         }
         .report-topbar,
         .admin-sidebar,
@@ -893,20 +947,170 @@ require 'layout/base.php';
             display: none !important;
         }
         .score-report {
-            max-width: none;
-            padding: 0;
+            max-width: 100% !important;
+            padding: 9mm 10mm !important;
+            margin: 0 !important;
         }
-        .report-grid {
-            grid-template-columns: 1fr;
-        }
-        .report-hero,
-        .sub-block,
-        .drawing-card,
-        .naming-cell,
-        .report-sign-footer {
+
+        /* Hero & 2-Column Demographics */
+        .report-hero {
+            padding: 16px 20px !important;
+            border-radius: 12px !important;
             box-shadow: none !important;
             break-inside: avoid;
             page-break-inside: avoid;
+        }
+        .report-eyebrow {
+            margin-bottom: 5px !important;
+            font-size: 9px !important;
+            padding: 2px 9px !important;
+        }
+        .report-hero h1 {
+            font-size: 20px !important;
+        }
+        .report-subtitle {
+            font-size: 11px !important;
+        }
+        .status-badge,
+        .hero-date-pill {
+            font-size: 10.5px !important;
+            padding: 4px 11px !important;
+        }
+        .hero-demo-wrap {
+            margin-top: 12px !important;
+            padding-top: 10px !important;
+        }
+        .hero-demo-title {
+            margin-bottom: 7px !important;
+            font-size: 9.5px !important;
+        }
+        .hero-demo-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 6px 12px !important;
+        }
+        .hero-demo-item {
+            padding: 5px 10px !important;
+        }
+        .hero-demo-item span {
+            font-size: 8.5px !important;
+        }
+        .hero-demo-item strong {
+            font-size: 11.5px !important;
+        }
+
+        /* Summary Grid in Print */
+        .report-grid {
+            grid-template-columns: 360px minmax(0, 1fr) !important;
+            gap: 14px !important;
+            margin-top: 14px !important;
+        }
+        .score-chart-wrap {
+            height: 225px !important;
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+        }
+        .score-chart-wrap canvas {
+            margin: 0 auto !important;
+            display: block !important;
+        }
+        .chart-legend-custom {
+            font-size: 10px !important;
+            gap: 5px 10px !important;
+        }
+        .summary-stats {
+            gap: 8px !important;
+            margin-top: 10px !important;
+        }
+        .summary-stat {
+            padding: 8px 10px !important;
+        }
+        .summary-stat strong {
+            font-size: 12.5px !important;
+        }
+        .section-list {
+            gap: 12px !important;
+        }
+        .section-row {
+            grid-template-columns: 105px minmax(0, 1fr) 82px !important;
+            gap: 10px !important;
+        }
+        .section-name {
+            font-size: 11.5px !important;
+        }
+        .section-value strong {
+            font-size: 12px !important;
+        }
+
+        /* Detailed Responses & Multi-Page Flow */
+        .detail-heading {
+            break-before: page !important;
+            page-break-before: always !important;
+            margin-top: 0 !important;
+            padding-top: 8mm !important;
+            margin-bottom: 10px !important;
+        }
+        .detail-heading h2 {
+            font-size: 15px !important;
+        }
+        .domain-card {
+            margin-bottom: 14px !important;
+        }
+        .sub-block {
+            padding: 11px 15px !important;
+            break-inside: avoid;
+            page-break-inside: avoid;
+        }
+        .sub-block-title {
+            font-size: 12px !important;
+        }
+        .ace-response-box {
+            padding: 8px 11px !important;
+            font-size: 11.5px !important;
+        }
+        .ace-detail-table th,
+        .ace-detail-table td {
+            padding: 6px 8px !important;
+            font-size: 11px !important;
+        }
+        .kv-row {
+            padding: 7px 10px !important;
+            font-size: 11.5px !important;
+            break-inside: avoid;
+            page-break-inside: avoid;
+        }
+        .naming-grid {
+            grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+            gap: 7px !important;
+        }
+        .naming-cell {
+            padding: 7px 9px !important;
+            break-inside: avoid;
+            page-break-inside: avoid;
+        }
+        .naming-cell-title {
+            font-size: 10px !important;
+        }
+        .naming-cell-ans {
+            font-size: 11px !important;
+        }
+        .drawings-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+            gap: 10px !important;
+        }
+        .drawing-preview {
+            height: 135px !important;
+        }
+        .clinical-notes {
+            padding: 10px 12px !important;
+            font-size: 11.5px !important;
+        }
+        .report-sign-footer {
+            margin-top: 22px !important;
+            padding-top: 12px !important;
+        }
+        .report-sign-line {
+            margin-top: 36px !important;
         }
         .report-card {
             box-shadow: none !important;
@@ -915,8 +1119,12 @@ require 'layout/base.php';
             page-break-inside: auto !important;
         }
         .card-head {
+            padding: 9px 15px !important;
             break-after: avoid;
             page-break-after: avoid;
+        }
+        .card-head h2 {
+            font-size: 11.5px !important;
         }
     }
 </style>
@@ -939,7 +1147,7 @@ require 'layout/base.php';
             <p class="mb-0"><?php echo ace_iii_report_escape($load_error); ?></p>
         </section>
     <?php else: ?>
-        <!-- HERO HEADER -->
+        <!-- HERO HEADER WITH 2-COLUMN CLIENT & CLINICAL DETAILS -->
         <header class="report-hero">
             <div class="hero-top">
                 <div>
@@ -951,43 +1159,27 @@ require 'layout/base.php';
                     <span class="status-badge <?php echo $status_class; ?>">
                         <?php echo ace_iii_report_escape($status_text); ?>
                     </span>
+                    <span class="hero-date-pill">
+                        <i class="bi bi-calendar3" aria-hidden="true"></i>
+                        Date: <?php echo ace_iii_report_escape($formatted_date); ?>
+                    </span>
                 </div>
             </div>
 
-            <div class="report-meta">
-                <div class="meta-box">
-                    <span>Patient Name</span>
-                    <strong><?php echo ace_iii_report_escape($patient_name); ?></strong>
-                </div>
-                <div class="meta-box">
-                    <span>Assessment Date</span>
-                    <strong><?php echo ace_iii_report_escape(date('d M Y', strtotime($record['assessment_date']))); ?></strong>
-                </div>
-                <div class="meta-box">
-                    <span>Evaluating Clinician</span>
-                    <strong><?php echo ace_iii_report_escape($clinician_name); ?></strong>
-                </div>
-            </div>
-        </header>
-
-        <!-- PATIENT DEMOGRAPHICS -->
-        <?php if (!empty($demographics)): ?>
-            <section class="report-card" style="margin-top: 20px;">
-                <div class="card-head">
-                    <h2>Patient Demographic Details</h2>
-                </div>
-                <div class="card-body-pad">
-                    <div class="demo-grid">
+            <?php if (!empty($demographics)): ?>
+                <div class="hero-demo-wrap">
+                    <div class="hero-demo-title">Patient &amp; Clinical Details</div>
+                    <div class="hero-demo-grid">
                         <?php foreach ($demographics as $demo_label => $demo_val): ?>
-                            <div class="demo-item">
+                            <div class="hero-demo-item">
                                 <span><?php echo ace_iii_report_escape($demo_label); ?></span>
                                 <strong><?php echo ace_iii_report_escape($demo_val); ?></strong>
                             </div>
                         <?php endforeach; ?>
                     </div>
                 </div>
-            </section>
-        <?php endif; ?>
+            <?php endif; ?>
+        </header>
 
         <!-- SUMMARY CHARTS & DOMAIN BREAKDOWN -->
         <div class="report-grid">
@@ -1568,7 +1760,7 @@ require 'layout/base.php';
             }
         };
 
-        new Chart(canvas, {
+        var ace3Chart = new Chart(canvas, {
             type: 'doughnut',
             data: {
                 labels: <?php echo json_encode($chart_labels, JSON_UNESCAPED_UNICODE); ?>,
@@ -1599,6 +1791,13 @@ require 'layout/base.php';
                 }
             },
             plugins: [aceCalloutAndCenter]
+        });
+
+        window.addEventListener('beforeprint', function () {
+            ace3Chart.resize(360, 225);
+        });
+        window.addEventListener('afterprint', function () {
+            ace3Chart.resize();
         });
     });
 </script>
