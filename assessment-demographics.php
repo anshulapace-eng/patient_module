@@ -106,6 +106,43 @@ if (!function_exists('assessment_demographics_html')) {
             @media (max-width: 560px) { .assessment-demographics-grid { grid-template-columns: 1fr; } }
         </style>
         <?php
+        static $assessmentDemographicsAutoFillRendered = false;
+        if (!$assessmentDemographicsAutoFillRendered) {
+            $assessmentDemographicsAutoFillRendered = true;
+            ?>
+            <script>
+            document.addEventListener('DOMContentLoaded', function () {
+                var patientSelect = document.querySelector('select[name="patient_id"]');
+                if (!patientSelect) return;
+
+                var applyDemographics = function (data) {
+                    if (!data) return;
+                    Object.keys(data).forEach(function (key) {
+                        var input = document.querySelector('[name="demographics[' + key + ']"], [name="demographics_' + key + '"]');
+                        if (input && !input.readOnly) {
+                            input.value = data[key] || '';
+                            input.dispatchEvent(new Event('change', { bubbles: true }));
+                        }
+                    });
+                };
+
+                var loadDemographics = function () {
+                    var patientId = parseInt(patientSelect.value || '0', 10);
+                    if (patientId < 1) return;
+                    fetch('get_patient_demographics.php?patient_id=' + encodeURIComponent(patientId), {
+                        headers: { 'Accept': 'application/json' },
+                        credentials: 'same-origin'
+                    }).then(function (response) { return response.json(); })
+                      .then(function (payload) { if (payload.success) applyDemographics(payload.data); })
+                      .catch(function () {});
+                };
+
+                patientSelect.addEventListener('change', loadDemographics);
+                if (patientSelect.value) loadDemographics();
+            });
+            </script>
+            <?php
+        }
         return ob_get_clean();
     }
 }
@@ -126,5 +163,77 @@ if (!function_exists('assessment_demographics_ensure_column')) {
             $result->free();
         }
         return true;
+    }
+}
+
+if (!function_exists('assessment_demographics_load_for_patient')) {
+    function assessment_demographics_load_for_patient($conn, $patientId)
+    {
+        $patientId = filter_var($patientId, FILTER_VALIDATE_INT);
+        $patientId = $patientId === false ? 0 : (int) $patientId;
+        $empty = assessment_demographics_normalize([]);
+        if ($patientId < 1 || !isset($conn)) {
+            return $empty;
+        }
+
+        $tableQueries = [
+            'bprs_assessments' => 'SELECT demographic_data FROM bprs_assessments WHERE patient_id = ? AND demographic_data IS NOT NULL AND demographic_data <> "" ORDER BY assessment_date DESC, id DESC LIMIT 1',
+            'panss_assessments' => 'SELECT demographic_data FROM panss_assessments WHERE patient_id = ? AND demographic_data IS NOT NULL AND demographic_data <> "" ORDER BY assessment_date DESC, id DESC LIMIT 1',
+            'ymrs_assessments' => 'SELECT demographic_data FROM ymrs_assessments WHERE patient_id = ? AND demographic_data IS NOT NULL AND demographic_data <> "" ORDER BY assessment_date DESC, id DESC LIMIT 1',
+            'ace_iii_assessments' => 'SELECT demographic_data FROM ace_iii_assessments WHERE patient_id = ? AND demographic_data IS NOT NULL AND demographic_data <> "" ORDER BY assessment_date DESC, id DESC LIMIT 1',
+            'assessment_responses' => 'SELECT demographic_data FROM assessment_responses WHERE patient_id = ? AND demographic_data IS NOT NULL AND demographic_data <> "" ORDER BY assessment_date DESC, id DESC LIMIT 1',
+        ];
+
+        foreach ($tableQueries as $tableName => $sql) {
+            $check = $conn->query("SHOW TABLES LIKE '" . $conn->real_escape_string($tableName) . "'");
+            if (!$check || $check->num_rows < 1) {
+                if ($check) $check->free();
+                continue;
+            }
+            $check->free();
+
+            $columnCheck = $conn->query("SHOW COLUMNS FROM `{$tableName}` LIKE 'demographic_data'");
+            if (!$columnCheck || $columnCheck->num_rows < 1) {
+                if ($columnCheck) $columnCheck->free();
+                continue;
+            }
+            $columnCheck->free();
+
+            $stmt = $conn->prepare($sql);
+            if (!$stmt) continue;
+            $stmt->bind_param('i', $patientId);
+            $stmt->execute();
+            $row = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
+
+            if (!is_array($row)) continue;
+            $decoded = json_decode((string) ($row['demographic_data'] ?? ''), true);
+            $decoded = assessment_demographics_normalize(is_array($decoded) ? $decoded : []);
+
+            foreach ($decoded as $key => $value) {
+                if ($value !== '' && ($empty[$key] ?? '') === '') {
+                    $empty[$key] = $value;
+                }
+            }
+        }
+
+        $patientStmt = $conn->prepare(
+            'SELECT first_name, last_name, phone, email FROM users
+             WHERE id = ? AND role_id = 2 AND patient_id = ' . PATIENT_SCOPE_ID . ' LIMIT 1'
+        );
+        if ($patientStmt) {
+            $patientStmt->bind_param('i', $patientId);
+            $patientStmt->execute();
+            $patientRow = $patientStmt->get_result()->fetch_assoc();
+            $patientStmt->close();
+            if (is_array($patientRow)) {
+                $patientName = trim((string) ($patientRow['first_name'] ?? '') . ' ' . (($patientRow['last_name'] ?? '.') === '.' ? '' : (string) ($patientRow['last_name'] ?? '')));
+                $empty['client_name'] = $empty['client_name'] !== '' ? $empty['client_name'] : $patientName;
+                $empty['contact_no'] = $empty['contact_no'] !== '' ? $empty['contact_no'] : (string) ($patientRow['phone'] ?? '');
+                $empty['email_id'] = $empty['email_id'] !== '' ? $empty['email_id'] : (string) ($patientRow['email'] ?? '');
+            }
+        }
+
+        return $empty;
     }
 }
