@@ -1,13 +1,21 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
 require 'config.php';
 require 'ymrs-assessment-items.php';
 require 'ymrs-assessment-schema.php';
 require 'assessment-demographics.php';
 
-if (!isset($_SESSION['user_login']) || (int)($_SESSION['role'] ?? 0) !== 1) {
+if (!isset($_SESSION['user_login']) || (int) ($_SESSION['role'] ?? 0) !== 1) {
     header('Location: login.php');
     exit;
+}
+
+function ymrs_score_escape($v)
+{
+    return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
 }
 
 $page_title = 'YMRS Score Report - Vimhans Academic';
@@ -19,6 +27,7 @@ if ($id === false || $id < 1) {
     http_response_code(400);
     $load_error = 'The assessment link is invalid.';
 } elseif (!$ymrs_schema_ready) {
+    http_response_code(500);
     $load_error = 'Assessment records are unavailable.';
 } else {
     $stmt = $conn->prepare(
@@ -30,43 +39,86 @@ if ($id === false || $id < 1) {
          LEFT JOIN users c ON c.id = y.clinician_id
          WHERE y.id = ? LIMIT 1'
     );
-    $stmt->bind_param('i', $id);
-    $stmt->execute();
-    $record = $stmt->get_result()->fetch_assoc() ?: null;
-    $stmt->close();
-    if (!$record) {
-        http_response_code(404);
-        $load_error = 'This assessment record was not found.';
+    if (!$stmt) {
+        error_log('YMRS score report prepare failed: ' . $conn->error);
+        http_response_code(500);
+        $load_error = 'The score report could not be loaded. Please try again later.';
+    } else {
+        $stmt->bind_param('i', $id);
+        $stmt->execute();
+        $record = $stmt->get_result()->fetch_assoc() ?: null;
+        $stmt->close();
+        if (!$record) {
+            http_response_code(404);
+            $load_error = 'This assessment record was not found.';
+        }
     }
 }
 
 $scores = [];
 $demographics = [];
 $total = 0;
+$rated_count = 0;
+$symptomatic_count = 0;
 $patient_name = '';
 $clinician_name = '';
+$formatted_date = '—';
 $notes = '';
 $severity_label = 'Normal / Remission';
 $severity_class = 'normal';
 $severity_color = '#0f766e';
 
 if ($record) {
-    $decoded = json_decode((string)$record['score_data'], true);
+    $decoded = json_decode((string) $record['score_data'], true);
     $decoded = is_array($decoded) ? $decoded : [];
-    $total = (int)$record['total_score'];
+    $total = (int) $record['total_score'];
     $patient_name = trim($record['patient_name']) ?: 'Unknown patient';
     $clinician_name = trim($record['clinician_name']) ?: 'Unknown clinician';
-    $notes = (string)($record['clinical_notes'] ?? '');
+    $notes = (string) ($record['clinical_notes'] ?? '');
 
-    $demo_decoded = json_decode((string)($record['demographic_data'] ?? ''), true);
+    $demo_decoded = json_decode((string) ($record['demographic_data'] ?? ''), true);
     $normalized_demo = assessment_demographics_normalize(is_array($demo_decoded) ? $demo_decoded : []);
-    foreach ($normalized_demo as $dk => $dv) {
-        if (in_array($dk, ['date', 'client_name'], true)) {
-            continue;
+
+    $get_demo = static function (array $keys) use ($normalized_demo): string {
+        foreach ($keys as $k) {
+            if (!isset($normalized_demo[$k])) {
+                continue;
+            }
+            $v = $normalized_demo[$k];
+            $str = is_array($v) ? implode(', ', array_filter($v)) : trim((string) $v);
+            if ($str !== '') {
+                return $str;
+            }
         }
-        $val_str = is_array($dv) ? implode(', ', array_filter($dv)) : trim((string)$dv);
-        $demographics[ucwords(str_replace('_', ' ', (string)$dk))] = $val_str !== '' ? $val_str : '—';
+        return '—';
+    };
+
+    $raw_date = $get_demo(['date']);
+    $formatted_date = $raw_date !== '—' && strtotime($raw_date) !== false
+        ? date('d M Y', strtotime($raw_date))
+        : (!empty($record['assessment_date']) ? date('d M Y', strtotime($record['assessment_date'])) : '—');
+
+    $age_val = $get_demo(['age']);
+    $gender_val = $get_demo(['gender', 'sex']);
+    $age_gender_combined = $get_demo(['age_gender', 'age_/_gender']);
+    if ($age_gender_combined === '—') {
+        $parts = array_filter([$age_val !== '—' ? $age_val : '', $gender_val !== '—' ? $gender_val : '']);
+        $age_gender_combined = !empty($parts) ? implode(' / ', $parts) : '—';
     }
+
+    // Exact 2-Column Header Order (Client Name first from dropdown, followed by client's exact sequence)
+    $demographics = [
+        'Client Name'             => $patient_name,
+        'Date'                    => $formatted_date,
+        'UHID'                    => $get_demo(['uhid']),
+        'Age / Gender'            => $age_gender_combined,
+        'Contact No'              => $get_demo(['contact_no', 'contact_number', 'phone']),
+        'Email ID'                => $get_demo(['email_id', 'email']),
+        'Caregiver Name'          => $get_demo(['caregiver_name']),
+        'Contact No of Caregiver' => $get_demo(['contact_no_of_caregiver', 'caregiver_contact', 'caregiver_contact_no']),
+        'Consultant'              => $get_demo(['consultant']),
+        'Evaluating Professional' => $clinician_name,
+    ];
 
     if ($total >= 26) {
         $severity_label = 'Severe Mania';
@@ -87,7 +139,14 @@ if ($record) {
     }
 
     foreach ($ymrs_items as $field => $item) {
-        $value = isset($decoded[$field]) && is_numeric($decoded[$field]) ? (int)$decoded[$field] : 0;
+        $is_rated = isset($decoded[$field]) && is_numeric($decoded[$field]);
+        $value = $is_rated ? (int) $decoded[$field] : 0;
+        if ($is_rated) {
+            $rated_count++;
+        }
+        if ($value > 0) {
+            $symptomatic_count++;
+        }
         $scores[] = [
             'title' => $item['title'],
             'value' => $value,
@@ -98,12 +157,8 @@ if ($record) {
 }
 
 $clamped_total = max(0, min(60, $total));
-$score_pct = (int)round(($clamped_total / 60) * 100);
-
-function ymrs_score_escape($v)
-{
-    return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
-}
+$score_pct = (int) round(($clamped_total / 60) * 100);
+$total_items_count = count($ymrs_items);
 
 require 'layout/base.php';
 ?>
@@ -122,7 +177,7 @@ require 'layout/base.php';
     .ymrs-report {
         max-width: 1180px;
         margin: 0 auto;
-        padding: 24px 18px 48px;
+        padding: 24px 18px 52px;
         color: var(--yr-text);
         font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     }
@@ -176,24 +231,24 @@ require 'layout/base.php';
         transform: translateY(-1px);
     }
 
-    /* Hero Banner */
+    /* Executive Hero Banner (with Integrated 2-Column Demographics) */
     .ymrs-hero {
         position: relative;
         overflow: hidden;
-        padding: 28px 30px;
+        padding: 26px 28px;
         border-radius: 16px;
-        background: linear-gradient(135deg, #0f3f3c 0%, #0f766e 58%, #14b8a6 100%);
+        background: linear-gradient(135deg, #0f3f3c 0%, #0f766e 55%, #0891b2 100%);
         color: #fff;
-        box-shadow: 0 12px 30px -8px rgba(15, 118, 110, 0.35);
+        box-shadow: 0 14px 32px -8px rgba(15, 118, 110, 0.32);
     }
 
     .ymrs-hero::after {
         content: "";
         position: absolute;
-        right: -60px;
-        top: -60px;
-        width: 240px;
-        height: 240px;
+        right: -50px;
+        top: -70px;
+        width: 260px;
+        height: 260px;
         border-radius: 50%;
         background: radial-gradient(circle, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0) 70%);
         pointer-events: none;
@@ -218,171 +273,220 @@ require 'layout/base.php';
         letter-spacing: 0.08em;
         text-transform: uppercase;
         color: #ccfbf1;
-        background: rgba(255, 255, 255, 0.12);
+        background: rgba(255, 255, 255, 0.14);
         padding: 4px 11px;
         border-radius: 999px;
-        margin-bottom: 10px;
+        margin-bottom: 8px;
     }
 
     .ymrs-hero h1 {
         margin: 0;
-        font-size: 28px;
+        font-size: clamp(24px, 3.5vw, 31px);
         font-weight: 800;
         letter-spacing: -0.02em;
         color: #fff;
     }
 
     .ymrs-hero-sub {
-        margin: 6px 0 0;
+        margin: 5px 0 0;
         font-size: 13.5px;
         color: #ccfbf1;
     }
 
     .ymrs-hero-badge {
-        display: inline-flex;
+        display: flex;
         flex-direction: column;
         align-items: flex-end;
-        gap: 6px;
+        gap: 8px;
     }
 
-    .ymrs-severity-pill {
+    .ymrs-date-pill {
         display: inline-flex;
         align-items: center;
-        gap: 6px;
-        padding: 6px 14px;
+        gap: 7px;
+        padding: 7px 15px;
         border-radius: 999px;
-        font-size: 12.5px;
+        background: rgba(255, 255, 255, 0.18);
+        border: 1px solid rgba(255, 255, 255, 0.28);
+        color: #fff;
+        font-size: 13px;
         font-weight: 800;
         white-space: nowrap;
     }
 
-    .ymrs-severity-pill.normal { background: #dcfce7; color: #166534; }
-    .ymrs-severity-pill.mild { background: #fef3c7; color: #92400e; }
-    .ymrs-severity-pill.moderate { background: #ffedd5; color: #9a3412; }
-    .ymrs-severity-pill.severe { background: #fee2e2; color: #991b1b; }
-
-    .ymrs-meta-grid {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 12px;
-        margin-top: 22px;
+    /* Integrated 2-Column Demographics Inside Hero */
+    .ymrs-hero-demo-wrap {
+        margin-top: 18px;
+        padding-top: 16px;
+        border-top: 1px solid rgba(255, 255, 255, 0.18);
         position: relative;
         z-index: 1;
     }
 
-    .ymrs-meta-box {
-        background: rgba(255, 255, 255, 0.12);
-        border: 1px solid rgba(255, 255, 255, 0.18);
-        border-radius: 10px;
-        padding: 11px 14px;
-        backdrop-filter: blur(4px);
+    .ymrs-hero-demo-title {
+        font-size: 10.5px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.09em;
+        color: #99f6e4;
+        margin-bottom: 11px;
     }
 
-    .ymrs-meta-box span {
+    .ymrs-hero-demo-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px 14px;
+    }
+
+    .ymrs-hero-demo-item {
+        background: rgba(255, 255, 255, 0.10);
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        border-radius: 9px;
+        padding: 8px 13px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+
+    .ymrs-hero-demo-item span {
+        display: block;
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #ccfbf1;
+        opacity: 0.9;
+    }
+
+    .ymrs-hero-demo-item strong {
+        display: block;
+        margin-top: 2px;
+        font-size: 13.5px;
+        font-weight: 700;
+        color: #fff;
+        overflow-wrap: anywhere;
+    }
+
+    /* 4-Column KPI Strip */
+    .ymrs-kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+        margin-top: 18px;
+    }
+
+    .ymrs-kpi {
+        background: #fff;
+        border: 1px solid var(--yr-border);
+        border-radius: 12px;
+        padding: 15px 17px;
+        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
+        border-top: 3px solid var(--kpi-accent, var(--yr-primary));
+    }
+
+    .ymrs-kpi-label {
         display: block;
         font-size: 10.5px;
         font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: 0.06em;
-        color: #ccfbf1;
+        letter-spacing: 0.05em;
+        color: var(--yr-muted);
     }
 
-    .ymrs-meta-box strong {
+    .ymrs-kpi-val {
+        display: flex;
+        align-items: baseline;
+        gap: 4px;
+        margin-top: 6px;
+    }
+
+    .ymrs-kpi-val strong {
+        font-size: 24px;
+        font-weight: 800;
+        line-height: 1.1;
+        color: var(--yr-text);
+    }
+
+    .ymrs-kpi-val strong.is-severity-text {
+        font-size: 18px;
+    }
+
+    .ymrs-kpi-val span {
+        font-size: 13px;
+        font-weight: 700;
+        color: #94a3b8;
+    }
+
+    .ymrs-kpi-sub {
         display: block;
         margin-top: 4px;
-        font-size: 14.5px;
-        font-weight: 700;
-        color: #fff;
+        font-size: 11px;
+        color: var(--yr-muted);
     }
 
-    /* Stacked Full-Width Sections */
-    .ymrs-section-stack {
-        display: flex;
-        flex-direction: column;
-        gap: 20px;
-        margin-top: 20px;
-    }
-
+    /* Standard Section Card */
     .ymrs-card {
         background: #fff;
         border: 1px solid var(--yr-border);
         border-radius: 14px;
         box-shadow: var(--yr-shadow);
         overflow: hidden;
+        margin-top: 18px;
     }
 
     .ymrs-card-head {
         background: linear-gradient(to right, #f8fafc, #f1f5f9);
         border-bottom: 1px solid var(--yr-border);
         border-left: 4px solid var(--yr-primary);
-        padding: 13px 20px;
+        padding: 12px 18px;
         display: flex;
         justify-content: space-between;
         align-items: center;
+        gap: 12px;
     }
 
     .ymrs-card-head h2 {
         margin: 0;
-        font-size: 13.5px;
+        font-size: 13px;
         font-weight: 800;
         text-transform: uppercase;
         letter-spacing: 0.04em;
         color: var(--yr-text);
     }
 
+    .ymrs-card-pill {
+        background: var(--yr-primary-soft);
+        color: var(--yr-primary);
+        border: 1px solid #99f6e4;
+        padding: 3px 11px;
+        border-radius: 999px;
+        font-size: 11.5px;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
     .ymrs-card-body {
-        padding: 20px 22px;
-    }
-
-    /* Demographics Grid */
-    .ymrs-demo-grid {
-        display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 12px;
-    }
-
-    .ymrs-demo-item {
-        background: #f8fafc;
-        border: 1px solid var(--yr-border-soft);
-        border-radius: 10px;
-        padding: 10px 14px;
-    }
-
-    .ymrs-demo-item span {
-        display: block;
-        font-size: 10.5px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-        color: var(--yr-muted);
-    }
-
-    .ymrs-demo-item strong {
-        display: block;
-        margin-top: 3px;
-        font-size: 13.5px;
-        color: var(--yr-text);
-        overflow-wrap: anywhere;
+        padding: 18px 20px;
     }
 
     /* Full-Width Overall Score Row */
     .ymrs-overview-inner {
         display: grid;
-        grid-template-columns: 440px minmax(0, 1fr);
-        gap: 28px;
+        grid-template-columns: 460px minmax(0, 1fr);
+        gap: 26px;
         align-items: center;
     }
 
     .ymrs-chart-wrap {
         position: relative;
         width: 100%;
-        height: 260px;
+        height: 255px;
         margin: 0 auto;
     }
 
     /* Severity Scale Legend */
     .ymrs-scale-guide {
-        padding: 4px 0;
+        padding: 2px 0;
     }
 
     .ymrs-scale-title {
@@ -394,6 +498,12 @@ require 'layout/base.php';
         margin-bottom: 10px;
     }
 
+    .ymrs-scale-list {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 7px;
+    }
+
     .ymrs-scale-item {
         display: flex;
         justify-content: space-between;
@@ -402,9 +512,8 @@ require 'layout/base.php';
         border-radius: 8px;
         font-size: 13px;
         color: #475569;
-        margin-bottom: 6px;
         background: #f8fafc;
-        border: 1px solid transparent;
+        border: 1px solid var(--yr-border-soft);
     }
 
     .ymrs-scale-item.active {
@@ -423,6 +532,91 @@ require 'layout/base.php';
         margin-right: 8px;
     }
 
+    /* Summary Highlight Box inside Overall Score */
+    .ymrs-summary-box {
+        margin-top: 12px;
+        padding: 12px 15px;
+        border-radius: 11px;
+        background: #f8fafc;
+        border: 1px solid var(--yr-border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    .ymrs-summary-left {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+    }
+
+    .ymrs-summary-icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 9px;
+        background: var(--yr-primary-soft);
+        color: var(--yr-primary);
+        display: grid;
+        place-items: center;
+        font-size: 16px;
+        flex-shrink: 0;
+    }
+
+    .ymrs-summary-title {
+        font-size: 13px;
+        font-weight: 800;
+        color: var(--yr-text);
+    }
+
+    .ymrs-summary-sub {
+        font-size: 11.5px;
+        color: var(--yr-muted);
+    }
+
+    .ymrs-summary-val {
+        padding: 5px 12px;
+        border-radius: 9px;
+        background: var(--yr-primary-soft);
+        border: 1px solid #99f6e4;
+        color: var(--yr-primary-dark);
+        font-size: 18px;
+        font-weight: 900;
+        white-space: nowrap;
+    }
+
+    .ymrs-summary-val span {
+        font-size: 12px;
+        font-weight: 700;
+        color: #0f766e;
+    }
+
+    /* Section Divider for Page 2 */
+    .ymrs-section-divider {
+        margin: 26px 0 14px;
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 12px;
+    }
+
+    .ymrs-section-divider h2 {
+        margin: 0;
+        font-size: 17px;
+        font-weight: 800;
+        color: var(--yr-text);
+    }
+
+    .ymrs-section-divider span {
+        font-size: 12.5px;
+        color: var(--yr-muted);
+        font-weight: 600;
+    }
+
+    .ymrs-section-divider + .ymrs-card {
+        margin-top: 0;
+    }
+
     /* Question-Wise Q&A Table */
     .ymrs-qa-table {
         width: 100%;
@@ -437,13 +631,13 @@ require 'layout/base.php';
         font-weight: 800;
         text-transform: uppercase;
         letter-spacing: 0.04em;
-        padding: 12px 14px;
+        padding: 11px 14px;
         border-bottom: 1px solid var(--yr-border);
         text-align: left;
     }
 
     .ymrs-qa-table tbody td {
-        padding: 13px 14px;
+        padding: 12px 14px;
         border-bottom: 1px solid var(--yr-border-soft);
         vertical-align: middle;
     }
@@ -515,7 +709,7 @@ require 'layout/base.php';
     .ymrs-notes-text {
         margin: 0;
         white-space: pre-wrap;
-        font-size: 14px;
+        font-size: 13.5px;
         line-height: 1.65;
         color: #334155;
         background: #f8fafc;
@@ -532,7 +726,7 @@ require 'layout/base.php';
         align-items: flex-end;
         gap: 40px;
         margin-top: 32px;
-        padding: 24px 8px 8px;
+        padding: 20px 8px 8px;
         border-top: 1px solid #e2e8f0;
         break-inside: avoid;
         page-break-inside: avoid;
@@ -545,7 +739,7 @@ require 'layout/base.php';
 
     .report-sign-line {
         border-top: 1px solid #334155;
-        margin-top: 52px;
+        margin-top: 44px;
         padding-top: 8px;
     }
 
@@ -572,30 +766,26 @@ require 'layout/base.php';
         font-weight: 600;
     }
 
-    @media (max-width: 960px) {
-        .ymrs-meta-grid,
+    @media (max-width: 1024px) {
+        .ymrs-kpi-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
         .ymrs-overview-inner {
             grid-template-columns: 1fr;
         }
-        .ymrs-demo-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
     }
 
-    @media (max-width: 600px) {
+    @media (max-width: 700px) {
         .ymrs-report {
             padding: 16px 12px 32px;
         }
         .ymrs-hero {
-            padding: 22px 18px;
-        }
-        .ymrs-hero h1 {
-            font-size: 22px;
+            padding: 20px 18px;
         }
         .ymrs-hero-badge {
             align-items: flex-start;
         }
-        .ymrs-demo-grid {
+        .ymrs-hero-demo-grid {
             grid-template-columns: 1fr;
         }
         .report-sign-footer {
@@ -608,15 +798,26 @@ require 'layout/base.php';
         }
     }
 
+    @media (max-width: 480px) {
+        .ymrs-kpi-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    /* PRINT LAYOUT: Strictly 2 Pages (Page 1 = Header + 2-Col Demographics + KPI + Overall Score, Page 2 = 11 Questions + Notes + Signature) */
+    @page {
+        size: A4 portrait;
+        margin: 0;
+    }
+
     @media print {
+        html,
         body {
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
             background: #fff !important;
-        }
-        .ymrs-report {
-            max-width: 100%;
-            padding: 0;
+            margin: 0 !important;
+            padding: 0 !important;
         }
         .ymrs-report-top,
         .admin-sidebar,
@@ -624,12 +825,195 @@ require 'layout/base.php';
         .sidebar-backdrop {
             display: none !important;
         }
-        .ymrs-hero,
-        .ymrs-overview-card,
-        .ymrs-qa-table tbody tr {
+        .ymrs-report {
+            max-width: 100% !important;
+            padding: 9mm 10mm !important;
+            margin: 0 !important;
+        }
+
+        /* ========== PAGE 1: FULL-PAGE EXECUTIVE FIT ========== */
+        .ymrs-hero {
+            padding: 16px 20px !important;
+            border-radius: 12px !important;
             box-shadow: none !important;
             break-inside: avoid;
             page-break-inside: avoid;
+        }
+        .ymrs-hero-eyebrow {
+            margin-bottom: 5px !important;
+            font-size: 9px !important;
+            padding: 2px 9px !important;
+        }
+        .ymrs-hero h1 {
+            font-size: 20px !important;
+        }
+        .ymrs-hero-sub {
+            font-size: 11px !important;
+        }
+        .ymrs-hero-demo-wrap {
+            margin-top: 12px !important;
+            padding-top: 10px !important;
+        }
+        .ymrs-hero-demo-title {
+            margin-bottom: 7px !important;
+            font-size: 9.5px !important;
+        }
+        .ymrs-hero-demo-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 6px 12px !important;
+        }
+        .ymrs-hero-demo-item {
+            padding: 5px 10px !important;
+        }
+        .ymrs-hero-demo-item span {
+            font-size: 8.5px !important;
+        }
+        .ymrs-hero-demo-item strong {
+            font-size: 11.5px !important;
+        }
+
+        /* 4 KPI cards in 1 row */
+        .ymrs-kpi-grid {
+            grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+            gap: 10px !important;
+            margin-top: 14px !important;
+        }
+        .ymrs-kpi {
+            padding: 11px 13px !important;
+            box-shadow: none !important;
+            break-inside: avoid;
+            page-break-inside: avoid;
+        }
+        .ymrs-kpi-label {
+            font-size: 9px !important;
+        }
+        .ymrs-kpi-val strong {
+            font-size: 19px !important;
+        }
+        .ymrs-kpi-val strong.is-severity-text {
+            font-size: 14.5px !important;
+        }
+        .ymrs-kpi-sub {
+            font-size: 9.5px !important;
+            margin-top: 4px !important;
+        }
+
+        /* Overall Score Card on Page 1 */
+        .ymrs-overview-card {
+            margin-top: 14px !important;
+            break-inside: avoid;
+            page-break-inside: avoid;
+        }
+        .ymrs-card-head {
+            padding: 9px 15px !important;
+            break-after: avoid;
+            page-break-after: avoid;
+        }
+        .ymrs-card-head h2 {
+            font-size: 11.5px !important;
+        }
+        .ymrs-card-body {
+            padding: 14px 16px !important;
+        }
+        .ymrs-overview-inner {
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 14px !important;
+            align-items: stretch !important;
+        }
+        .ymrs-chart-wrap {
+            width: 560px !important;
+            max-width: 100% !important;
+            height: 245px !important;
+            margin: 0 auto !important;
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+        }
+        .ymrs-chart-wrap canvas {
+            margin: 0 auto !important;
+            display: block !important;
+        }
+        .ymrs-scale-title {
+            margin-bottom: 8px !important;
+        }
+        .ymrs-scale-list {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 8px 12px !important;
+        }
+        .ymrs-scale-item {
+            padding: 7px 12px !important;
+            font-size: 11.5px !important;
+        }
+        .ymrs-summary-box {
+            margin-top: 10px !important;
+            padding: 9px 13px !important;
+        }
+        .ymrs-summary-title {
+            font-size: 12px !important;
+        }
+        .ymrs-summary-sub {
+            font-size: 10.5px !important;
+        }
+        .ymrs-summary-val {
+            font-size: 16px !important;
+            padding: 4px 10px !important;
+        }
+
+        /* ========== PAGE 2: QUESTION DETAILS + NOTES + SIGNATURE ========== */
+        .print-page-break {
+            break-before: page !important;
+            page-break-before: always !important;
+            margin-top: 0 !important;
+            padding-top: 9mm !important;
+            margin-bottom: 12px !important;
+        }
+        .print-page-break h2 {
+            font-size: 15px !important;
+        }
+
+        .ymrs-qa-table thead th {
+            padding: 8px 12px !important;
+            font-size: 10px !important;
+        }
+        .ymrs-qa-table tbody td {
+            padding: 8px 12px !important;
+            font-size: 11.5px !important;
+        }
+        .ymrs-qa-table tbody tr {
+            break-inside: avoid;
+            page-break-inside: avoid;
+        }
+        .ymrs-item-num {
+            width: 22px !important;
+            height: 22px !important;
+            font-size: 10px !important;
+        }
+        .ymrs-item-title {
+            font-size: 11.5px !important;
+        }
+        .ymrs-track {
+            margin-top: 4px !important;
+            height: 5px !important;
+        }
+        .ymrs-item-score {
+            padding: 2.5px 9px !important;
+            font-size: 10.5px !important;
+        }
+        .ymrs-notes-card {
+            margin-top: 12px !important;
+        }
+        .ymrs-notes-text {
+            padding: 10px 12px !important;
+            font-size: 11px !important;
+            line-height: 1.45 !important;
+        }
+        .report-sign-footer {
+            margin-top: 26px !important;
+            padding-top: 14px !important;
+        }
+        .report-sign-line {
+            margin-top: 38px !important;
         }
         .ymrs-card {
             box-shadow: none !important;
@@ -637,25 +1021,25 @@ require 'layout/base.php';
             break-inside: auto !important;
             page-break-inside: auto !important;
         }
-        .ymrs-card-head {
-            break-after: avoid;
-            page-break-after: avoid;
-        }
     }
 </style>
 
 <div class="ymrs-report">
     <div class="ymrs-report-top">
-        <a class="ymrs-btn-back" href="ymrs-assessment-records.php">&larr; Back to Records</a>
+        <a class="ymrs-btn-back" href="ymrs-assessment-records.php">
+            <i class="bi bi-arrow-left" aria-hidden="true"></i> Back to Records
+        </a>
         <?php if ($record): ?>
-            <button type="button" class="ymrs-btn-print" onclick="window.print()">Print Report</button>
+            <button type="button" class="ymrs-btn-print" onclick="window.print()">
+                <i class="bi bi-printer" aria-hidden="true"></i> Print Report
+            </button>
         <?php endif; ?>
     </div>
 
     <?php if (!$record): ?>
         <div class="ymrs-empty" role="alert"><?php echo ymrs_score_escape($load_error); ?></div>
     <?php else: ?>
-        <!-- Hero Header -->
+        <!-- HERO HEADER WITH 2-COLUMN CLIENT & CLINICAL DETAILS -->
         <header class="ymrs-hero">
             <div class="ymrs-hero-top">
                 <div>
@@ -664,61 +1048,77 @@ require 'layout/base.php';
                     <p class="ymrs-hero-sub">Young Mania Rating Scale &middot; 11-Item Clinician-Rated Assessment</p>
                 </div>
                 <div class="ymrs-hero-badge">
-                    <span class="ymrs-severity-pill <?php echo ymrs_score_escape($severity_class); ?>">
-                        <?php echo ymrs_score_escape($severity_label); ?>
+                    <span class="ymrs-date-pill">
+                        <i class="bi bi-calendar3" aria-hidden="true"></i>
+                        Date: <?php echo ymrs_score_escape($formatted_date); ?>
                     </span>
                 </div>
             </div>
 
-            <div class="ymrs-meta-grid">
-                <div class="ymrs-meta-box">
-                    <span>Patient Name</span>
-                    <strong><?php echo ymrs_score_escape($patient_name); ?></strong>
-                </div>
-                <div class="ymrs-meta-box">
-                    <span>Assessment Date</span>
-                    <strong><?php echo ymrs_score_escape(date('d M Y', strtotime($record['assessment_date']))); ?></strong>
-                </div>
-                <div class="ymrs-meta-box">
-                    <span>Evaluating Clinician</span>
-                    <strong><?php echo ymrs_score_escape($clinician_name); ?></strong>
+            <div class="ymrs-hero-demo-wrap">
+                <div class="ymrs-hero-demo-title">Patient &amp; Clinical Details</div>
+                <div class="ymrs-hero-demo-grid">
+                    <?php foreach ($demographics as $demo_label => $demo_val): ?>
+                        <div class="ymrs-hero-demo-item">
+                            <span><?php echo ymrs_score_escape($demo_label); ?></span>
+                            <strong><?php echo ymrs_score_escape($demo_val); ?></strong>
+                        </div>
+                    <?php endforeach; ?>
                 </div>
             </div>
         </header>
 
-        <div class="ymrs-section-stack">
-            <!-- Patient Demographics -->
-            <?php if (!empty($demographics)): ?>
-                <section class="ymrs-card">
-                    <div class="ymrs-card-head">
-                        <h2>Patient Demographic Details</h2>
-                    </div>
-                    <div class="ymrs-card-body">
-                        <div class="ymrs-demo-grid">
-                            <?php foreach ($demographics as $demo_label => $demo_val): ?>
-                                <div class="ymrs-demo-item">
-                                    <span><?php echo ymrs_score_escape($demo_label); ?></span>
-                                    <strong><?php echo ymrs_score_escape($demo_val); ?></strong>
-                                </div>
-                            <?php endforeach; ?>
-                        </div>
-                    </div>
-                </section>
-            <?php endif; ?>
-
-            <!-- Full-Width Overall Score & Scale Guide -->
-            <section class="ymrs-card ymrs-overview-card">
-                <div class="ymrs-card-head">
-                    <h2>Overall Score</h2>
+        <!-- 4-COLUMN KPI STRIP -->
+        <div class="ymrs-kpi-grid">
+            <div class="ymrs-kpi" style="--kpi-accent: #0f766e;">
+                <span class="ymrs-kpi-label">Total YMRS Score</span>
+                <div class="ymrs-kpi-val">
+                    <strong><?php echo (int) $total; ?></strong>
+                    <span>/ 60</span>
                 </div>
-                <div class="ymrs-card-body">
-                    <div class="ymrs-overview-inner">
-                        <div class="ymrs-chart-wrap">
-                            <canvas id="ymrsChart"></canvas>
-                        </div>
+                <span class="ymrs-kpi-sub"><?php echo $total_items_count; ?> clinician-rated items</span>
+            </div>
+            <div class="ymrs-kpi" style="--kpi-accent: #0ea5e9;">
+                <span class="ymrs-kpi-label">Severity Percentage</span>
+                <div class="ymrs-kpi-val">
+                    <strong><?php echo $score_pct; ?>%</strong>
+                </div>
+                <span class="ymrs-kpi-sub">Of maximum scale score (60)</span>
+            </div>
+            <div class="ymrs-kpi" style="--kpi-accent: <?php echo ymrs_score_escape($severity_color); ?>;">
+                <span class="ymrs-kpi-label">Clinical Severity</span>
+                <div class="ymrs-kpi-val">
+                    <strong class="is-severity-text" style="color: <?php echo ymrs_score_escape($severity_color); ?>;">
+                        <?php echo ymrs_score_escape($severity_label); ?>
+                    </strong>
+                </div>
+                <span class="ymrs-kpi-sub">Mania severity classification</span>
+            </div>
+            <div class="ymrs-kpi" style="--kpi-accent: #4f46e5;">
+                <span class="ymrs-kpi-label">Items Evaluated</span>
+                <div class="ymrs-kpi-val">
+                    <strong><?php echo $rated_count; ?></strong>
+                    <span>/ <?php echo $total_items_count; ?></span>
+                </div>
+                <span class="ymrs-kpi-sub"><?php echo $symptomatic_count; ?> items rated above 0</span>
+            </div>
+        </div>
 
-                        <div class="ymrs-scale-guide">
-                            <div class="ymrs-scale-title">Severity Reference Guide</div>
+        <!-- FULL-WIDTH OVERALL SCORE & SEVERITY GUIDE (STAYS ON PAGE 1) -->
+        <section class="ymrs-card ymrs-overview-card">
+            <div class="ymrs-card-head">
+                <h2>Overall Score &amp; Severity Classification</h2>
+                <span class="ymrs-card-pill"><?php echo ymrs_score_escape($severity_label); ?></span>
+            </div>
+            <div class="ymrs-card-body">
+                <div class="ymrs-overview-inner">
+                    <div class="ymrs-chart-wrap">
+                        <canvas id="ymrsChart"></canvas>
+                    </div>
+
+                    <div class="ymrs-scale-guide">
+                        <div class="ymrs-scale-title">Severity Reference Guide</div>
+                        <div class="ymrs-scale-list">
                             <div class="ymrs-scale-item<?php echo $severity_class === 'normal' ? ' active' : ''; ?>">
                                 <span><i class="ymrs-dot" style="background:#0f766e;"></i>Normal / Remission</span>
                                 <span>0 – 12</span>
@@ -736,79 +1136,98 @@ require 'layout/base.php';
                                 <span>26 – 60</span>
                             </div>
                         </div>
+
+                        <div class="ymrs-summary-box">
+                            <div class="ymrs-summary-left">
+                                <span class="ymrs-summary-icon" aria-hidden="true"><i class="bi bi-clipboard2-pulse"></i></span>
+                                <div>
+                                    <div class="ymrs-summary-title">Total Assessment Score</div>
+                                    <div class="ymrs-summary-sub">Sum of all <?php echo $total_items_count; ?> YMRS clinical items (<?php echo $score_pct; ?>%)</div>
+                                </div>
+                            </div>
+                            <div class="ymrs-summary-val">
+                                <?php echo (int) $total; ?><span> / 60</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
-            </section>
+            </div>
+        </section>
 
-            <!-- Full-Width Question-Wise Answers & Scores Table -->
-            <section class="ymrs-card">
-                <div class="ymrs-card-head">
-                    <h2>Question-Wise Answers &amp; Scores (<?php echo count($scores); ?>)</h2>
-                </div>
-                <div class="table-responsive">
-                    <table class="ymrs-qa-table">
-                        <thead>
+        <!-- QUESTION-WISE ANSWERS & SCORES (STARTS ON PAGE 2 IN PRINT) -->
+        <div class="ymrs-section-divider print-page-break">
+            <h2>Question-Wise Answers &amp; Scores</h2>
+            <span>11 Items &middot; Clinical Rating Breakdown</span>
+        </div>
+
+        <section class="ymrs-card">
+            <div class="ymrs-card-head">
+                <h2>Item-Level Symptom Ratings (<?php echo count($scores); ?>)</h2>
+                <span class="ymrs-card-pill"><?php echo (int) $total; ?> / 60</span>
+            </div>
+            <div class="table-responsive">
+                <table class="ymrs-qa-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 56px;">#</th>
+                            <th style="width: 34%;">Question / Item</th>
+                            <th>Selected Answer</th>
+                            <th style="width: 105px; text-align: right;">Score</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($scores as $index => $item):
+                            $item_pct = $item['max'] > 0 ? min(100, round(($item['value'] / $item['max']) * 100)) : 0;
+                        ?>
                             <tr>
-                                <th style="width: 56px;">#</th>
-                                <th style="width: 34%;">Question / Item</th>
-                                <th>Selected Answer</th>
-                                <th style="width: 105px; text-align: right;">Score</th>
+                                <td>
+                                    <span class="ymrs-item-num"><?php echo str_pad((string) ($index + 1), 2, '0', STR_PAD_LEFT); ?></span>
+                                </td>
+                                <td>
+                                    <div class="ymrs-item-title"><?php echo ymrs_score_escape($item['title']); ?></div>
+                                    <div class="ymrs-track">
+                                        <span class="ymrs-fill" style="width: <?php echo $item_pct; ?>%;"></span>
+                                    </div>
+                                </td>
+                                <td style="color: #334155; line-height: 1.45;">
+                                    <?php echo ymrs_score_escape($item['label']); ?>
+                                </td>
+                                <td style="text-align: right;">
+                                    <span class="ymrs-item-score<?php echo $item['value'] === 0 ? ' zero' : ''; ?>">
+                                        <?php echo (int) $item['value']; ?> / <?php echo (int) $item['max']; ?>
+                                    </span>
+                                </td>
                             </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($scores as $index => $item):
-                                $item_pct = $item['max'] > 0 ? min(100, round(($item['value'] / $item['max']) * 100)) : 0;
-                            ?>
-                                <tr>
-                                    <td>
-                                        <span class="ymrs-item-num"><?php echo str_pad((string)($index + 1), 2, '0', STR_PAD_LEFT); ?></span>
-                                    </td>
-                                    <td>
-                                        <div class="ymrs-item-title"><?php echo ymrs_score_escape($item['title']); ?></div>
-                                        <div class="ymrs-track">
-                                            <span class="ymrs-fill" style="width: <?php echo $item_pct; ?>%;"></span>
-                                        </div>
-                                    </td>
-                                    <td style="color: #334155; line-height: 1.45;">
-                                        <?php echo ymrs_score_escape($item['label']); ?>
-                                    </td>
-                                    <td style="text-align: right;">
-                                        <span class="ymrs-item-score<?php echo $item['value'] === 0 ? ' zero' : ''; ?>">
-                                            <?php echo (int)$item['value']; ?> / <?php echo (int)$item['max']; ?>
-                                        </span>
-                                    </td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Clinical Notes -->
+        <?php if (trim($notes) !== ''): ?>
+            <section class="ymrs-card ymrs-notes-card">
+                <div class="ymrs-card-head">
+                    <h2>Clinical Notes &amp; Observations</h2>
+                </div>
+                <div class="ymrs-card-body">
+                    <p class="ymrs-notes-text"><?php echo ymrs_score_escape($notes); ?></p>
                 </div>
             </section>
+        <?php endif; ?>
 
-            <!-- Clinical Notes -->
-            <?php if (trim($notes) !== ''): ?>
-                <section class="ymrs-card">
-                    <div class="ymrs-card-head">
-                        <h2>Clinical Notes &amp; Observations</h2>
-                    </div>
-                    <div class="ymrs-card-body">
-                        <p class="ymrs-notes-text"><?php echo ymrs_score_escape($notes); ?></p>
-                    </div>
-                </section>
-            <?php endif; ?>
-
-            <!-- Simple Invoice-Style Signature Footer -->
-            <div class="report-sign-footer">
-                <div class="report-sign-block">
-                    <div class="report-sign-line">
-                        <div class="report-sign-title"><?php echo ymrs_score_escape($clinician_name); ?></div>
-                        <div class="report-sign-sub">Evaluating Clinician</div>
-                    </div>
+        <!-- Simple Invoice-Style Signature Footer -->
+        <div class="report-sign-footer">
+            <div class="report-sign-block">
+                <div class="report-sign-line">
+                    <div class="report-sign-title"><?php echo ymrs_score_escape($clinician_name); ?></div>
+                    <div class="report-sign-sub">Evaluating Clinician</div>
                 </div>
-                <div class="report-sign-block">
-                    <div class="report-sign-line">
-                        <div class="report-sign-title">Authorized Signatory</div>
-                        <div class="report-sign-sub">Clinical Supervisor / Stamp</div>
-                    </div>
+            </div>
+            <div class="report-sign-block">
+                <div class="report-sign-line">
+                    <div class="report-sign-title">Authorized Signatory</div>
+                    <div class="report-sign-sub">Clinical Supervisor / Stamp</div>
                 </div>
             </div>
         </div>
@@ -848,16 +1267,16 @@ require 'layout/base.php';
                 ctx.textBaseline = 'middle';
 
                 ctx.fillStyle = '#0f172a';
-                ctx.font = '900 32px system-ui, -apple-system, sans-serif';
+                ctx.font = '900 30px system-ui, -apple-system, sans-serif';
                 ctx.fillText(String(totalScore), centerX, centerY - 14);
 
                 ctx.fillStyle = '#64748b';
-                ctx.font = '700 12px system-ui, -apple-system, sans-serif';
-                ctx.fillText('out of 60', centerX, centerY + 10);
+                ctx.font = '700 11.5px system-ui, -apple-system, sans-serif';
+                ctx.fillText('out of 60', centerX, centerY + 9);
 
                 ctx.fillStyle = ymrsBands[activeIndex].color;
                 ctx.font = '800 11px system-ui, -apple-system, sans-serif';
-                ctx.fillText(scorePct + '% of max', centerX, centerY + 27);
+                ctx.fillText(scorePct + '% of max', centerX, centerY + 25);
 
                 // 2. Har color slice ke bagal me Name + Range (anti-overlap ke saath)
                 var lastRightY = -999;
@@ -909,7 +1328,7 @@ require 'layout/base.php';
             }
         };
 
-        new Chart(canvas, {
+        var ymrsChart = new Chart(canvas, {
             type: 'doughnut',
             data: {
                 labels: ymrsBands.map(function(b) { return b.label; }),
@@ -926,7 +1345,7 @@ require 'layout/base.php';
                 maintainAspectRatio: false,
                 cutout: '66%',
                 layout: {
-                    padding: { top: 24, bottom: 24, left: 118, right: 118 }
+                    padding: { top: 24, bottom: 24, left: 135, right: 135 }
                 },
                 plugins: {
                     legend: { display: false },
@@ -941,6 +1360,13 @@ require 'layout/base.php';
                 }
             },
             plugins: [ymrsCalloutAndCenter]
+        });
+
+        window.addEventListener('beforeprint', function() {
+            ymrsChart.resize(560, 245);
+        });
+        window.addEventListener('afterprint', function() {
+            ymrsChart.resize();
         });
     });
 </script>

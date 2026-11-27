@@ -1,5 +1,7 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 ob_start();
 
 require 'config.php';
@@ -27,15 +29,15 @@ $module_pie_data = [
     'bprs' => [
         'title' => 'BPRS Severity Breakdown',
         'subtitle' => 'Distribution of saved ratings by clinical severity band',
-        'labels' => ['Normal / Minimal (≤30)', 'Mildly Ill (31–40)', 'Moderately Ill (41–52)', 'Severely Ill (53+)'],
+        'labels' => ['Normal (≤30)', 'Mild (31–40)', 'Moderate (41–52)', 'Severe (53+)'],
         'values' => [0, 0, 0, 0],
-        'colors' => ['#0f766e', '#f59e0b', '#f97316', '#dc2626'],
+        'colors' => ['#0f766e', '#f59e0b', '#f97316', '#e11d48'],
         'unit' => 'records',
     ],
     'panss' => [
         'title' => 'PANSS Subscale Share',
         'subtitle' => 'Average points across Positive, Negative & General scales',
-        'labels' => ['Positive Scale (P)', 'Negative Scale (N)', 'General Psychopathology (G)'],
+        'labels' => ['Positive (P)', 'Negative (N)', 'General (G)'],
         'values' => [0, 0, 0],
         'colors' => ['#4f46e5', '#0ea5e9', '#0f766e'],
         'unit' => 'avg pts',
@@ -43,17 +45,17 @@ $module_pie_data = [
     'ymrs' => [
         'title' => 'YMRS Severity Breakdown',
         'subtitle' => 'Distribution of saved mania assessments by severity',
-        'labels' => ['Normal / Remission (0–12)', 'Minimal / Mild (13–19)', 'Moderate Mania (20–25)', 'Severe Mania (26+)'],
+        'labels' => ['Normal (0–12)', 'Mild (13–19)', 'Moderate (20–25)', 'Severe (26+)'],
         'values' => [0, 0, 0, 0],
-        'colors' => ['#0f766e', '#f59e0b', '#f97316', '#dc2626'],
+        'colors' => ['#0f766e', '#f59e0b', '#f97316', '#e11d48'],
         'unit' => 'records',
     ],
     'ace_iii' => [
         'title' => 'ACE-III Cognitive Breakdown',
         'subtitle' => 'Completed cognitive interpretations vs pending/draft',
-        'labels' => ['Normal (88–100)', 'Borderline / MCI (83–87)', 'Abnormal (≤82)', 'Pending / Draft'],
+        'labels' => ['Normal (88–100)', 'Borderline (83–87)', 'Abnormal (≤82)', 'Pending / Draft'],
         'values' => [0, 0, 0, 0],
-        'colors' => ['#0f766e', '#f59e0b', '#dc2626', '#94a3b8'],
+        'colors' => ['#0f766e', '#f59e0b', '#e11d48', '#94a3b8'],
         'unit' => 'records',
     ],
 ];
@@ -272,38 +274,39 @@ if (isset($conn)) {
 }
 
 $completion_rate = (int) $stats['assigned'] > 0
-    ? round(((int) $stats['completed'] / (int) $stats['assigned']) * 100)
+    ? (int) round(((int) $stats['completed'] / (int) $stats['assigned']) * 100)
     : 0;
+
 $assignment_chart_data = [
     (int) $stats['completed'],
     (int) $stats['pending'],
 ];
+
 $assessment_chart_data = [
     'labels' => ['BAI', 'BDI', 'BPRS', 'PANSS', 'YMRS', 'ACE-III'],
     'total' => [
-        $beck_stats_loaded ? $beck_stats['bai']['records'] : null,
-        $beck_stats_loaded ? $beck_stats['bdi']['records'] : null,
-        $module_stats['bprs']['total'] === null ? null : (int) $module_stats['bprs']['total'],
-        $module_stats['panss']['total'] === null ? null : (int) $module_stats['panss']['total'],
-        $module_stats['ymrs']['total'] === null ? null : (int) $module_stats['ymrs']['total'],
-        $module_stats['ace_iii']['total'] === null ? null : (int) $module_stats['ace_iii']['total'],
+        $beck_stats_loaded ? $beck_stats['bai']['records'] : 0,
+        $beck_stats_loaded ? $beck_stats['bdi']['records'] : 0,
+        (int) ($module_stats['bprs']['total'] ?? 0),
+        (int) ($module_stats['panss']['total'] ?? 0),
+        (int) ($module_stats['ymrs']['total'] ?? 0),
+        (int) ($module_stats['ace_iii']['total'] ?? 0),
     ],
     'recent' => [
-        $beck_stats_loaded ? $beck_stats['bai']['recent'] : null,
-        $beck_stats_loaded ? $beck_stats['bdi']['recent'] : null,
-        $module_stats['bprs']['total'] === null ? null : (int) $module_stats['bprs']['recent'],
-        $module_stats['panss']['total'] === null ? null : (int) $module_stats['panss']['recent'],
-        $module_stats['ymrs']['total'] === null ? null : (int) $module_stats['ymrs']['recent'],
-        $module_stats['ace_iii']['total'] === null ? null : (int) $module_stats['ace_iii']['recent'],
+        $beck_stats_loaded ? $beck_stats['bai']['recent'] : 0,
+        $beck_stats_loaded ? $beck_stats['bdi']['recent'] : 0,
+        (int) ($module_stats['bprs']['recent'] ?? 0),
+        (int) ($module_stats['panss']['recent'] ?? 0),
+        (int) ($module_stats['ymrs']['recent'] ?? 0),
+        (int) ($module_stats['ace_iii']['recent'] ?? 0),
     ],
 ];
 
-// Build per-tab pie chart config
 $tab_charts_config = [
     'bai' => [
         'title' => 'BAI Assignment Completion',
         'subtitle' => 'Completed vs awaiting patient responses',
-        'labels' => ['Completed', 'Awaiting Response'],
+        'labels' => ['Completed', 'Awaiting'],
         'values' => $beck_stats_loaded ? [$beck_stats['bai']['completed'], $beck_stats['bai']['pending']] : [0, 0],
         'colors' => ['#0f766e', '#f59e0b'],
         'unit' => 'assignments',
@@ -311,7 +314,7 @@ $tab_charts_config = [
     'bdi' => [
         'title' => 'BDI Assignment Completion',
         'subtitle' => 'Completed vs awaiting patient responses',
-        'labels' => ['Completed', 'Awaiting Response'],
+        'labels' => ['Completed', 'Awaiting'],
         'values' => $beck_stats_loaded ? [$beck_stats['bdi']['completed'], $beck_stats['bdi']['pending']] : [0, 0],
         'colors' => ['#4f46e5', '#f59e0b'],
         'unit' => 'assignments',
@@ -322,497 +325,1527 @@ $tab_charts_config = [
     'ace_iii' => $module_pie_data['ace_iii'],
 ];
 
+// All 6 Scales Live Matrix + Individual Tab Details
 $scale_tabs = [
     [
         'id' => 'bai',
+        'code' => 'BAI',
         'title' => 'Beck Anxiety Inventory (BAI)',
+        'short_name' => 'Beck Anxiety Inventory',
         'icon' => 'bi-heart-pulse',
-        'description' => 'Review BAI assessment assignments and submitted responses. Tracks workflow completion and recent activity.',
+        'accent' => '#0f766e',
+        'description' => '21-item self-rated anxiety assessment tracking assignment completion, pending follow-ups, and submitted clinical reports.',
         'badge' => $beck_stats_loaded ? $beck_stats['bai']['records'] . ' responses' : 'Data unavailable',
+        'tab_count' => $beck_stats_loaded ? (int) $beck_stats['bai']['records'] : null,
+        'recent' => $beck_stats_loaded ? (int) $beck_stats['bai']['recent'] : 0,
+        'meta_label' => 'Assigned / Pending',
+        'meta_val' => $beck_stats_loaded ? ($beck_stats['bai']['assigned'] . ' / ' . $beck_stats['bai']['pending']) : '—',
         'metrics' => [
-            ['Assigned', $beck_stats_loaded ? $beck_stats['bai']['assigned'] : null, 'bi-send'],
-            ['Completed', $beck_stats_loaded ? $beck_stats['bai']['completed'] : null, 'bi-check2-circle'],
-            ['Awaiting', $beck_stats_loaded ? $beck_stats['bai']['pending'] : null, 'bi-hourglass-split'],
-            ['Submitted responses', $beck_stats_loaded ? $beck_stats['bai']['records'] : null, 'bi-file-earmark-check'],
+            ['Assigned', $beck_stats_loaded ? $beck_stats['bai']['assigned'] : null, 'bi-send', 'Total sent'],
+            ['Completed', $beck_stats_loaded ? $beck_stats['bai']['completed'] : null, 'bi-check2-circle', 'Responses done'],
+            ['Awaiting', $beck_stats_loaded ? $beck_stats['bai']['pending'] : null, 'bi-hourglass-split', 'Pending follow-up'],
+            ['Last 7 Days', $beck_stats_loaded ? $beck_stats['bai']['recent'] : null, 'bi-calendar2-week', 'Recent intake'],
         ],
         'summary_title' => 'Workflow Summary',
         'summary' => $beck_stats_loaded
-            ? $beck_stats['bai']['recent'] . ' responses submitted in the last 7 days. Use assignment records to follow up on pending patients or open the patient assessment workflow.'
+            ? $beck_stats['bai']['recent'] . ' BAI responses submitted in the last 7 days. Open BAI Records to review severity reports or start a new assessment.'
             : 'BAI response activity could not be loaded right now.',
-        'actions' => [
-            ['Patient assessments', 'public-assessment-form.php', 'bi-person-vcard'],
-            ['Assignment records', 'assigned-assessments.php', 'bi-table'],
-        ],
+        'new_url' => 'bai-assessments.php',
+        'rec_url' => 'bai-assessment-records.php',
+        'new_label' => 'New BAI Assessment',
+        'rec_label' => 'BAI Records',
     ],
     [
         'id' => 'bdi',
+        'code' => 'BDI',
         'title' => 'Beck Depression Inventory (BDI)',
+        'short_name' => 'Beck Depression Inventory',
         'icon' => 'bi-clipboard2-heart',
-        'description' => 'Review BDI assessment assignments and submitted responses. Tracks workflow completion and recent activity.',
+        'accent' => '#4f46e5',
+        'description' => '21-item depression severity inventory tracking patient assignments, completion status, and historical score reports.',
         'badge' => $beck_stats_loaded ? $beck_stats['bdi']['records'] . ' responses' : 'Data unavailable',
+        'tab_count' => $beck_stats_loaded ? (int) $beck_stats['bdi']['records'] : null,
+        'recent' => $beck_stats_loaded ? (int) $beck_stats['bdi']['recent'] : 0,
+        'meta_label' => 'Assigned / Pending',
+        'meta_val' => $beck_stats_loaded ? ($beck_stats['bdi']['assigned'] . ' / ' . $beck_stats['bdi']['pending']) : '—',
         'metrics' => [
-            ['Assigned', $beck_stats_loaded ? $beck_stats['bdi']['assigned'] : null, 'bi-send'],
-            ['Completed', $beck_stats_loaded ? $beck_stats['bdi']['completed'] : null, 'bi-check2-circle'],
-            ['Awaiting', $beck_stats_loaded ? $beck_stats['bdi']['pending'] : null, 'bi-hourglass-split'],
-            ['Submitted responses', $beck_stats_loaded ? $beck_stats['bdi']['records'] : null, 'bi-file-earmark-check'],
+            ['Assigned', $beck_stats_loaded ? $beck_stats['bdi']['assigned'] : null, 'bi-send', 'Total sent'],
+            ['Completed', $beck_stats_loaded ? $beck_stats['bdi']['completed'] : null, 'bi-check2-circle', 'Responses done'],
+            ['Awaiting', $beck_stats_loaded ? $beck_stats['bdi']['pending'] : null, 'bi-hourglass-split', 'Pending follow-up'],
+            ['Last 7 Days', $beck_stats_loaded ? $beck_stats['bdi']['recent'] : null, 'bi-calendar2-week', 'Recent intake'],
         ],
         'summary_title' => 'Workflow Summary',
         'summary' => $beck_stats_loaded
-            ? $beck_stats['bdi']['recent'] . ' responses submitted in the last 7 days. Use assignment records to track response status and follow-ups.'
+            ? $beck_stats['bdi']['recent'] . ' BDI responses submitted in the last 7 days. Use BDI Records to inspect item-wise depression scores and print reports.'
             : 'BDI response activity could not be loaded right now.',
-        'actions' => [
-            ['Patient assessments', 'public-assessment-form.php', 'bi-person-vcard'],
-            ['Assignment records', 'assigned-assessments.php', 'bi-table'],
-        ],
+        'new_url' => 'bdi-assessments.php',
+        'rec_url' => 'bdi-assessment-records.php',
+        'new_label' => 'New BDI Assessment',
+        'rec_label' => 'BDI Records',
     ],
     [
         'id' => 'bprs',
+        'code' => 'BPRS',
         'title' => 'Brief Psychiatric Rating Scale (BPRS)',
+        'short_name' => 'Brief Psychiatric Rating',
         'icon' => 'bi-clipboard2-pulse',
+        'accent' => '#0284c7',
         'description' => '18-item clinician-rated psychiatric scale with severity distribution and item-level score reports.',
         'badge' => $module_stats['bprs']['total'] === null ? 'Data unavailable' : (int) $module_stats['bprs']['total'] . ' saved ratings',
+        'tab_count' => $module_stats['bprs']['total'] === null ? null : (int) $module_stats['bprs']['total'],
+        'recent' => (int) $module_stats['bprs']['recent'],
+        'meta_label' => 'Avg. Score',
+        'meta_val' => $module_stats['bprs']['avg_score'] !== null ? $module_stats['bprs']['avg_score'] . ' / 126' : '—',
         'metrics' => [
-            ['Saved ratings', $module_stats['bprs']['total'], 'bi-file-earmark-check'],
-            ['Added in 7 days', $module_stats['bprs']['total'] === null ? null : $module_stats['bprs']['recent'], 'bi-calendar2-week'],
-            ['Patients rated', $module_stats['bprs']['patients'], 'bi-people'],
-            ['Avg. BPRS score', $module_stats['bprs']['avg_score'] !== null ? $module_stats['bprs']['avg_score'] . '/126' : null, 'bi-bar-chart'],
+            ['Saved Ratings', $module_stats['bprs']['total'], 'bi-file-earmark-check', 'Total records'],
+            ['Last 7 Days', $module_stats['bprs']['total'] === null ? null : $module_stats['bprs']['recent'], 'bi-calendar2-week', 'Recent ratings'],
+            ['Patients Rated', $module_stats['bprs']['patients'], 'bi-people', 'Unique patients'],
+            ['Avg. BPRS Score', $module_stats['bprs']['avg_score'] !== null ? $module_stats['bprs']['avg_score'] . '/126' : null, 'bi-bar-chart', 'Mean total score'],
         ],
         'summary_title' => 'Clinical Overview',
         'summary' => $module_stats['bprs']['total'] === null
             ? 'BPRS records are not available right now.'
-            : 'The pie chart shows how saved BPRS ratings fall across clinical severity bands (Normal, Mild, Moderate, Severe). Open records for full 18-item reports.',
-        'actions' => [
-            ['New BPRS rating', 'bprs-assessments.php', 'bi-plus-circle'],
-            ['BPRS records', 'bprs-assessment-records.php', 'bi-table'],
-        ],
+            : 'The chart and breakdown bars show how saved BPRS ratings distribute across Normal, Mild, Moderate, and Severe bands.',
+        'new_url' => 'bprs-assessments.php',
+        'rec_url' => 'bprs-assessment-records.php',
+        'new_label' => 'New BPRS Rating',
+        'rec_label' => 'BPRS Records',
     ],
     [
         'id' => 'panss',
+        'code' => 'PANSS',
         'title' => 'Positive and Negative Syndrome Scale (PANSS)',
+        'short_name' => 'Positive & Negative Syndrome',
         'icon' => 'bi-activity',
-        'description' => '30-item clinician-rated scale tracking Positive, Negative, General Psychopathology, and Composite scores.',
+        'accent' => '#7c3aed',
+        'description' => '30-item clinician-rated scale tracking Positive (P), Negative (N), General Psychopathology (G), and Composite scores.',
         'badge' => $module_stats['panss']['total'] === null ? 'Data unavailable' : (int) $module_stats['panss']['total'] . ' saved ratings',
+        'tab_count' => $module_stats['panss']['total'] === null ? null : (int) $module_stats['panss']['total'],
+        'recent' => (int) $module_stats['panss']['recent'],
+        'meta_label' => 'Avg. Composite',
+        'meta_val' => $module_stats['panss']['avg_score'] !== null ? (($module_stats['panss']['avg_score'] > 0 ? '+' : '') . $module_stats['panss']['avg_score']) : '—',
         'metrics' => [
-            ['Saved ratings', $module_stats['panss']['total'], 'bi-file-earmark-check'],
-            ['Added in 7 days', $module_stats['panss']['total'] === null ? null : $module_stats['panss']['recent'], 'bi-calendar2-week'],
-            ['Patients rated', $module_stats['panss']['patients'], 'bi-people'],
-            ['Avg. Composite', $module_stats['panss']['avg_score'] !== null ? ($module_stats['panss']['avg_score'] > 0 ? '+' : '') . $module_stats['panss']['avg_score'] : null, 'bi-calculator'],
+            ['Saved Ratings', $module_stats['panss']['total'], 'bi-file-earmark-check', 'Total records'],
+            ['Last 7 Days', $module_stats['panss']['total'] === null ? null : $module_stats['panss']['recent'], 'bi-calendar2-week', 'Recent ratings'],
+            ['Patients Rated', $module_stats['panss']['patients'], 'bi-people', 'Unique patients'],
+            ['Avg. Composite', $module_stats['panss']['avg_score'] !== null ? ($module_stats['panss']['avg_score'] > 0 ? '+' : '') . $module_stats['panss']['avg_score'] : null, 'bi-calculator', 'P − N index'],
         ],
         'summary_title' => 'Clinical Overview',
         'summary' => $module_stats['panss']['total'] === null
             ? 'PANSS records are not available right now.'
-            : 'The pie chart compares average scores across Positive (P), Negative (N), and General Psychopathology (G) subscales. Open records for detailed item ratings.',
-        'actions' => [
-            ['New PANSS rating', 'panss-assessments.php', 'bi-plus-circle'],
-            ['PANSS records', 'panss-assessment-records.php', 'bi-table'],
-        ],
+            : 'Compares mean subscale points across Positive (P), Negative (N), and General Psychopathology (G) domains.',
+        'new_url' => 'panss-assessments.php',
+        'rec_url' => 'panss-assessment-records.php',
+        'new_label' => 'New PANSS Rating',
+        'rec_label' => 'PANSS Records',
     ],
     [
         'id' => 'ymrs',
+        'code' => 'YMRS',
         'title' => 'Young Mania Rating Scale (YMRS)',
+        'short_name' => 'Young Mania Rating Scale',
         'icon' => 'bi-speedometer2',
-        'description' => '11-item clinician-rated mania evaluation with live severity categorization (0–60 scale).',
+        'accent' => '#d97706',
+        'description' => '11-item clinician-rated mania evaluation with live severity categorization across a 0–60 clinical scale.',
         'badge' => $module_stats['ymrs']['total'] === null ? 'Data unavailable' : (int) $module_stats['ymrs']['total'] . ' saved ratings',
+        'tab_count' => $module_stats['ymrs']['total'] === null ? null : (int) $module_stats['ymrs']['total'],
+        'recent' => (int) $module_stats['ymrs']['recent'],
+        'meta_label' => 'Avg. Score',
+        'meta_val' => $module_stats['ymrs']['avg_score'] !== null ? $module_stats['ymrs']['avg_score'] . ' / 60' : '—',
         'metrics' => [
-            ['Saved ratings', $module_stats['ymrs']['total'], 'bi-file-earmark-check'],
-            ['Added in 7 days', $module_stats['ymrs']['total'] === null ? null : $module_stats['ymrs']['recent'], 'bi-calendar2-week'],
-            ['Patients rated', $module_stats['ymrs']['patients'], 'bi-people'],
-            ['Avg. YMRS score', $module_stats['ymrs']['avg_score'] !== null ? $module_stats['ymrs']['avg_score'] . '/60' : null, 'bi-bar-chart'],
+            ['Saved Ratings', $module_stats['ymrs']['total'], 'bi-file-earmark-check', 'Total records'],
+            ['Last 7 Days', $module_stats['ymrs']['total'] === null ? null : $module_stats['ymrs']['recent'], 'bi-calendar2-week', 'Recent ratings'],
+            ['Patients Rated', $module_stats['ymrs']['patients'], 'bi-people', 'Unique patients'],
+            ['Avg. YMRS Score', $module_stats['ymrs']['avg_score'] !== null ? $module_stats['ymrs']['avg_score'] . '/60' : null, 'bi-bar-chart', 'Mean total score'],
         ],
         'summary_title' => 'Clinical Overview',
         'summary' => $module_stats['ymrs']['total'] === null
             ? 'YMRS records are not available right now.'
-            : 'The pie chart breaks down saved YMRS assessments into Normal/Remission, Minimal/Mild, Moderate, and Severe Mania bands.',
-        'actions' => [
-            ['New YMRS rating', 'ymrs-assessments.php', 'bi-plus-circle'],
-            ['YMRS records', 'ymrs-assessment-records.php', 'bi-table'],
-        ],
+            : 'Breaks down saved YMRS evaluations into Normal/Remission, Minimal/Mild, Moderate, and Severe Mania severity bands.',
+        'new_url' => 'ymrs-assessments.php',
+        'rec_url' => 'ymrs-assessment-records.php',
+        'new_label' => 'New YMRS Rating',
+        'rec_label' => 'YMRS Records',
     ],
     [
         'id' => 'ace_iii',
+        'code' => 'ACE-III',
         'title' => "Addenbrooke's Cognitive Examination (ACE-III)",
+        'short_name' => "Addenbrooke's Cognitive",
         'icon' => 'bi-cpu',
-        'description' => '100-point cognitive examination across Attention, Memory, Fluency, Language, and Visuospatial domains.',
+        'accent' => '#059669',
+        'description' => '100-point cognitive examination evaluating Attention, Memory, Fluency, Language, and Visuospatial domains.',
         'badge' => $module_stats['ace_iii']['total'] === null ? 'Data unavailable' : (int) $module_stats['ace_iii']['total'] . ' saved records',
+        'tab_count' => $module_stats['ace_iii']['total'] === null ? null : (int) $module_stats['ace_iii']['total'],
+        'recent' => (int) $module_stats['ace_iii']['recent'],
+        'meta_label' => 'Avg. Completed',
+        'meta_val' => $module_stats['ace_iii']['avg_score'] !== null ? $module_stats['ace_iii']['avg_score'] . ' / 100' : '—',
         'metrics' => [
-            ['Saved records', $module_stats['ace_iii']['total'], 'bi-file-earmark-check'],
-            ['Added in 7 days', $module_stats['ace_iii']['total'] === null ? null : $module_stats['ace_iii']['recent'], 'bi-calendar2-week'],
-            ['Patients assessed', $module_stats['ace_iii']['patients'], 'bi-people'],
-            ['Avg. Completed', $module_stats['ace_iii']['avg_score'] !== null ? $module_stats['ace_iii']['avg_score'] . '/100' : null, 'bi-award'],
+            ['Saved Records', $module_stats['ace_iii']['total'], 'bi-file-earmark-check', 'Total records'],
+            ['Last 7 Days', $module_stats['ace_iii']['total'] === null ? null : $module_stats['ace_iii']['recent'], 'bi-calendar2-week', 'Recent exams'],
+            ['Patients Assessed', $module_stats['ace_iii']['patients'], 'bi-people', 'Unique patients'],
+            ['Avg. Completed', $module_stats['ace_iii']['avg_score'] !== null ? $module_stats['ace_iii']['avg_score'] . '/100' : null, 'bi-award', 'Mean score'],
         ],
         'summary_title' => 'Clinical Overview',
         'summary' => $module_stats['ace_iii']['total'] === null
             ? 'ACE-III records are not available right now.'
-            : 'The pie chart displays completed cognitive function bands (Normal, Borderline/MCI, Abnormal) alongside Pending/Draft assessments awaiting clinician scoring.',
-        'actions' => [
-            ['New ACE-III assessment', 'ace-iii-assessments.php', 'bi-plus-circle'],
-            ['ACE-III records', 'ace-iii-assessment-records.php', 'bi-table'],
-        ],
+            : 'Displays completed cognitive interpretations (Normal, Borderline/MCI, Abnormal) alongside Pending/Draft assessments.',
+        'new_url' => 'ace-iii-assessments.php',
+        'rec_url' => 'ace-iii-assessment-records.php',
+        'new_label' => 'New ACE-III Exam',
+        'rec_label' => 'ACE-III Records',
     ],
 ];
+
+function dash_e($v)
+{
+    return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
+}
+
+function dash_initials($name)
+{
+    $parts = preg_split('/\s+/', trim((string) $name));
+    $initials = '';
+    foreach ($parts as $p) {
+        if ($p !== '') {
+            $initials .= strtoupper(substr($p, 0, 1));
+        }
+        if (strlen($initials) >= 2) break;
+    }
+    return $initials ?: 'PT';
+}
 
 require 'layout/base.php';
 ?>
 
 <style>
-    .dashboard-wrap { --dash-ink: #172b4d; --dash-muted: #68778d; --dash-teal: #0f766e; max-width: 1600px; margin: 0 auto; padding: 28px clamp(18px, 2.4vw, 36px) 48px; color: var(--dash-ink); background: #f4f7fb; font-family: Inter, "Segoe UI", system-ui, sans-serif; }
-    .dashboard-hero { position: relative; isolation: isolate; display: flex; justify-content: space-between; align-items: center; gap: 22px; overflow: hidden; min-height: 186px; margin-bottom: 22px; padding: 28px 34px; border: 1px solid rgba(255,255,255,.12); border-radius: 18px; background: linear-gradient(112deg, #12355b 0%, #145c70 58%, #0f766e 100%); box-shadow: 0 14px 34px rgba(20,62,91,.16); }
-    .dashboard-hero::before, .dashboard-hero::after { position: absolute; z-index: -1; display: block; border: 1px solid rgba(255,255,255,.11); border-radius: 50%; content: ""; pointer-events: none; }
-    .dashboard-hero::before { top: -158px; right: 12%; width: 360px; height: 360px; box-shadow: 0 0 0 34px rgba(255,255,255,.035), 0 0 0 72px rgba(255,255,255,.025); }
-    .dashboard-hero::after { right: -66px; bottom: -204px; width: 320px; height: 320px; background: rgba(91,220,200,.12); }
-    .dashboard-hero > div, .dashboard-action { position: relative; z-index: 1; }
-    .dashboard-eyebrow { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 10px; color: #b7eee8; font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
-    .dashboard-eyebrow::before { width: 7px; height: 7px; border-radius: 50%; background: #68e0c3; box-shadow: 0 0 0 4px rgba(104,224,195,.14); content: ""; }
-    .dashboard-hero h1 { margin: 0 0 8px; color: #fff; font-size: clamp(26px, 3vw, 36px); font-weight: 800; letter-spacing: -.03em; }
-    .dashboard-hero p { margin: 0; color: rgba(239,248,255,.82); font-size: 14px; }
-    .dashboard-date { display: inline-flex; align-items: center; gap: 8px; margin-top: 16px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,.17); color: rgba(239,248,255,.82); font-size: 12px; font-weight: 600; }
-    .dashboard-date i { color: #8ce2d2; }
-    .dashboard-action { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 8px; padding: 12px 18px; border: 1px solid rgba(255,255,255,.72); border-radius: 10px; background: #fff; color: #13536b; text-decoration: none; font-size: 13px; font-weight: 700; box-shadow: 0 5px 16px rgba(8,28,47,.16); transition: background .18s, transform .18s, box-shadow .18s; }
-    .dashboard-action:hover { transform: translateY(-2px); background: #e9fbf8; color: #104c62; box-shadow: 0 8px 20px rgba(8,28,47,.2); }
-    .dashboard-alert { margin-bottom: 18px; padding: 13px 16px; border: 1px solid #f5d69c; border-radius: 11px; background: #fff9eb; color: #875b11; font-size: 13px; }
-    .section-kicker { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 2px 12px; }
-    .section-kicker strong { display: inline-flex; align-items: center; gap: 8px; color: #344967; font-size: 13px; font-weight: 800; }
-    .section-kicker strong i { color: #0f766e; font-size: 15px; }
-    .section-kicker span { color: #7b8a9f; font-size: 11.5px; }
-
-    /* Tabs */
-    .dashboard-tabs { display: flex; width: fit-content; max-width: 100%; gap: 5px; overflow-x: auto; margin: 0 0 20px; padding: 5px; border: 1px solid #dde4ee; border-radius: 12px; background: #e9eef5; scrollbar-width: thin; }
-    .dashboard-tab { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 8px; min-height: 40px; padding: 0 16px; border: 0; border-radius: 8px; background: transparent; color: #4e5f77; font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; transition: all .15s ease; }
-    .dashboard-tab:hover { background: rgba(255,255,255,.72); color: #172b4d; }
-    .dashboard-tab[aria-selected="true"] { background: #17314f; color: #fff; box-shadow: 0 3px 8px rgba(17,37,61,.2); }
-    .dashboard-tab-count { display: inline-grid; min-width: 22px; height: 22px; place-items: center; padding: 0 6px; border-radius: 6px; background: rgba(23,49,79,.08); font-size: 10.5px; font-weight: 800; }
-    .dashboard-tab[aria-selected="true"] .dashboard-tab-count { background: rgba(255,255,255,.18); color: #fff; }
-    .dashboard-tab-panel[hidden] { display: none; }
-    .dashboard-tab-panel { animation: dashboard-panel-in .18s ease-out; }
-    @keyframes dashboard-panel-in { from { opacity: .6; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
-
-    /* Individual Scale Tab Layout */
-    .scale-intro { display: flex; justify-content: space-between; align-items: center; gap: 18px; margin: 0 0 16px; padding: 20px 24px; border: 1px solid #e1e9f0; border-left: 4px solid #0f766e; border-radius: 14px; background: #fff; box-shadow: 0 3px 12px rgba(30,55,90,.035); }
-    .scale-intro-main { display: flex; align-items: center; gap: 15px; }
-    .scale-intro-icon { display: grid; width: 50px; height: 50px; flex: 0 0 50px; place-items: center; border: 1px solid #ccfbf1; border-radius: 14px; background: #f0fdfa; color: #0f766e; font-size: 22px; }
-    .scale-intro h2 { margin: 0 0 4px; color: #172b4d; font-size: 18px; font-weight: 800; }
-    .scale-intro p { margin: 0; color: #64748b; font-size: 12.5px; line-height: 1.5; }
-    .scale-intro-badge { flex: 0 0 auto; padding: 7px 13px; border: 1px solid #99f6e4; border-radius: 999px; background: #f0fdfa; color: #0f766e; font-size: 12px; font-weight: 800; white-space: nowrap; }
-
-    .scale-stat-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
-    .scale-stat { padding: 16px 18px; border: 1px solid #e5eaf1; border-radius: 13px; background: #fff; box-shadow: 0 2px 8px rgba(30,55,90,.03); }
-    .scale-stat-label { display: flex; align-items: center; gap: 7px; color: #64748b; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
-    .scale-stat-label i { color: #0f766e; font-size: 14px; }
-    .scale-stat-value { display: block; margin-top: 10px; color: #172b4d; font-size: 26px; font-weight: 800; line-height: 1; letter-spacing: -.03em; }
-
-    /* Scale Tab 2-Column Analytics (Pie Chart + Summary/Breakdown) */
-    .scale-analytics-grid { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 16px; align-items: stretch; }
-    .scale-pie-card { border: 1px solid #e5eaf1; border-radius: 14px; background: #fff; box-shadow: 0 3px 12px rgba(30,55,90,.035); overflow: hidden; display: flex; flex-direction: column; }
-    .scale-pie-body { padding: 18px 20px 20px; display: flex; flex-direction: column; align-items: center; flex: 1; justify-content: center; }
-    .scale-pie-wrap { position: relative; width: 100%; max-width: 260px; height: 220px; margin: 0 auto 14px; }
-    .scale-legend-list { width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 14px; margin-top: 4px; }
-    .scale-legend-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 10px; border-radius: 8px; background: #f8fafc; border: 1px solid #f1f5f9; font-size: 12px; }
-    .scale-legend-left { display: inline-flex; align-items: center; gap: 7px; color: #334155; font-weight: 600; min-width: 0; }
-    .scale-legend-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
-    .scale-legend-val { font-weight: 800; color: #0f172a; white-space: nowrap; }
-
-    .scale-summary-card { border: 1px solid #e5eaf1; border-radius: 14px; background: #fff; box-shadow: 0 3px 12px rgba(30,55,90,.035); overflow: hidden; display: flex; flex-direction: column; justify-content: space-between; }
-    .scale-summary-body { padding: 20px 22px; }
-    .scale-summary-body h3 { margin: 0 0 8px; color: #172b4d; font-size: 15px; font-weight: 800; }
-    .scale-summary-body p { margin: 0 0 18px; color: #64748b; font-size: 13px; line-height: 1.65; }
-    .scale-actions { display: flex; flex-wrap: wrap; gap: 10px; }
-    .scale-action { display: inline-flex; align-items: center; gap: 7px; padding: 10px 16px; border: 1px solid #0f766e; border-radius: 9px; background: #0f766e; color: #fff; font-size: 12.5px; font-weight: 700; text-decoration: none; white-space: nowrap; transition: all .15s ease; }
-    .scale-action:hover { background: #115e59; border-color: #115e59; color: #fff; transform: translateY(-1px); }
-    .scale-action.secondary { background: #f0fdfa; color: #0f766e; border-color: #99f6e4; }
-    .scale-action.secondary:hover { background: #0f766e; color: #fff; border-color: #0f766e; }
-
-    /* Overview Cards & Charts */
-    .workspace-summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: -2px 0 18px; }
-    .workspace-summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 3px 12px; padding: 14px 16px; border: 1px solid #e7ecf2; border-radius: 12px; background: #fff; }
-    .workspace-summary > span { display: flex; align-items: center; gap: 7px; color: #64748b; font-size: 11.5px; font-weight: 700; }
-    .workspace-summary > span i { color: #0f766e; }
-    .workspace-summary > strong { grid-row: span 2; color: #172b4d; font-size: 24px; font-weight: 800; }
-    .workspace-summary small { color: #8996a8; font-size: 10.5px; }
-    .workspace-summary small a { color: #0f766e; font-weight: 700; text-decoration: none; }
-    .workspace-summary small a:hover { text-decoration: underline; }
-
-    .metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 22px; }
-    .metric-card, .dashboard-panel, .chart-card { min-width: 0; border: 1px solid #e5eaf1; border-radius: 15px; background: #fff; box-shadow: 0 3px 12px rgba(30,55,90,.035); }
-    .metric-card { position: relative; overflow: hidden; padding: 18px 20px; transition: transform .18s ease, box-shadow .18s ease; }
-    .metric-card::before { position: absolute; top: 0; right: 0; left: 0; height: 3px; background: #0f766e; content: ""; }
-    .metric-card:nth-child(2)::before { background: #4c6fff; }
-    .metric-card:nth-child(3)::before { background: #e3a73e; }
-    .metric-card:nth-child(4)::before { background: #10b981; }
-    .metric-card:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(30,55,90,.08); }
-    .metric-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-    .metric-label { color: #64748b; font-size: 12px; font-weight: 700; }
-    .metric-icon { display: grid; width: 38px; height: 38px; place-items: center; border: 1px solid #ccfbf1; border-radius: 11px; background: #f0fdfa; color: #0f766e; font-size: 17px; }
-    .metric-card:nth-child(2) .metric-icon { border-color: #e0e6ff; background: #f1f3ff; color: #4c63d2; }
-    .metric-card:nth-child(3) .metric-icon { border-color: #f7e9c9; background: #fff9eb; color: #b27816; }
-    .metric-card:nth-child(4) .metric-icon { border-color: #d4efdf; background: #effaf3; color: #059669; }
-    .metric-value { display: block; margin-top: 12px; color: #172b4d; font-size: 34px; font-weight: 800; line-height: 1; letter-spacing: -.04em; }
-    .metric-foot { display: block; margin-top: 8px; color: #8592a5; font-size: 11px; }
-
-    .analytics-grid { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.35fr); gap: 16px; margin-bottom: 20px; }
-    .chart-card { overflow: hidden; }
-    .chart-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 16px 20px 12px; border-bottom: 1px solid #f0f3f7; }
-    .chart-heading h2 { margin: 0; color: #172b4d; font-size: 14px; font-weight: 800; }
-    .chart-heading p { margin: 4px 0 0; color: #7b8a9f; font-size: 11.5px; }
-    .chart-total { padding: 5px 10px; border: 1px solid #99f6e4; border-radius: 8px; background: #f0fdfa; color: #0f766e; font-size: 11px; font-weight: 800; white-space: nowrap; }
-    .chart-canvas-wrap { position: relative; height: 236px; padding: 10px 16px 0; }
-    .chart-canvas-wrap.doughnut-wrap { height: 218px; max-width: 340px; margin: 0 auto; }
-    .chart-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; padding: 6px 16px 16px; color: #64748b; font-size: 11.5px; font-weight: 600; }
-    .legend-item { display: inline-flex; align-items: center; gap: 7px; }
-    .legend-dot { width: 9px; height: 9px; border-radius: 50%; }
-    .chart-note { padding: 0 20px 10px; color: #7b8a9f; font-size: 11px; }
-    .chart-links { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 20px 16px; }
-    .chart-links a { display: inline-flex; align-items: center; gap: 5px; padding: 6px 11px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; color: #0f766e; font-size: 11px; font-weight: 700; text-decoration: none; transition: all .15s ease; }
-    .chart-links a:hover { border-color: #99f6e4; background: #f0fdfa; color: #115e59; }
-
-    .dashboard-content-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(290px, .75fr); gap: 16px; align-items: start; }
-    .dashboard-panel { overflow: hidden; }
-    .panel-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid #edf1f5; }
-    .panel-heading h2 { margin: 0; color: #172b4d; font-size: 14px; font-weight: 800; }
-    .panel-heading a { display: inline-flex; align-items: center; gap: 5px; color: #0f766e; font-size: 11.5px; font-weight: 700; text-decoration: none; }
-    .assignment-table { width: 100%; border-collapse: collapse; }
-    .assignment-table th, .assignment-table td { padding: 12px 18px; border-bottom: 1px solid #f0f3f7; text-align: left; font-size: 12.5px; }
-    .assignment-table th { background: #fafbfd; color: #64748b; font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
-    .assignment-table td { color: #334155; }
-    .assignment-table tbody tr:hover { background: #f8fafc; }
-    .assignment-table tbody tr:last-child td { border-bottom: 0; }
-    .assignment-table td small { color: #8a97a8; font-size: 11px; }
-    .patient-name { color: #172b4d; font-weight: 700; }
-    .status { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid transparent; border-radius: 20px; font-size: 11px; font-weight: 700; white-space: nowrap; }
-    .status::before { width: 6px; height: 6px; border-radius: 50%; background: currentColor; content: ""; }
-    .status.completed { border-color: #cdebd9; background: #f0faf4; color: #15803d; }
-    .status.pending { border-color: #f4e3bf; background: #fff9eb; color: #a76e12; }
-    .empty-state { padding: 38px 20px; color: #728198; font-size: 13px; text-align: center; }
-
-    .progress-panel { padding: 18px 20px 20px; }
-    .progress-heading { display: flex; align-items: center; justify-content: space-between; color: #64748b; font-size: 12.5px; font-weight: 600; }
-    .progress-heading strong { color: #172b4d; font-size: 18px; font-weight: 800; }
-    .progress-track { overflow: hidden; height: 9px; margin: 12px 0 9px; border-radius: 20px; background: #e9eef4; }
-    .progress-fill { width: <?php echo $completion_rate; ?>%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #0f766e, #14b8a6); }
-    .progress-copy { margin: 0; color: #7b8a9f; font-size: 11.5px; line-height: 1.6; }
-    .quick-title { margin: 20px 0 10px; padding-top: 15px; border-top: 1px solid #edf1f5; color: #64748b; font-size: 10.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
-    .quick-links { display: grid; gap: 8px; }
-    .quick-link { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid #e9eef3; border-radius: 9px; background: #fff; color: #334155; text-decoration: none; font-size: 12px; font-weight: 700; transition: all .15s ease; }
-    .quick-link i { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 7px; background: #f0fdfa; color: #0f766e; font-size: 14px; }
-    .quick-link:hover { transform: translateX(2px); border-color: #99f6e4; background: #f0fdfa; color: #0f766e; }
-
-    @media (max-width: 1000px) {
-        .metric-grid, .scale-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-        .analytics-grid, .dashboard-content-grid, .scale-analytics-grid { grid-template-columns: 1fr; }
+    :root {
+        --cc-bg: #f3f6fa;
+        --cc-surface: #ffffff;
+        --cc-ink: #0f172a;
+        --cc-ink-2: #334155;
+        --cc-muted: #64748b;
+        --cc-primary: #0f766e;
+        --cc-primary-dark: #115e59;
+        --cc-primary-soft: #f0fdfa;
+        --cc-shadow: 0 8px 26px -6px rgba(15, 23, 42, 0.08), 0 2px 6px -1px rgba(15, 23, 42, 0.04);
+        --cc-shadow-hover: 0 14px 32px -8px rgba(15, 23, 42, 0.13);
     }
-    @media (max-width: 620px) {
-        .dashboard-wrap { padding: 16px 12px 28px; }
-        .dashboard-hero { align-items: flex-start; flex-direction: column; min-height: 0; padding: 22px 18px; }
-        .dashboard-action { width: 100%; justify-content: center; }
-        .dashboard-tabs { width: 100%; }
-        .scale-intro { flex-direction: column; align-items: flex-start; }
-        .scale-legend-list, .workspace-summary-grid { grid-template-columns: 1fr; }
-        .assignment-table th:nth-child(3), .assignment-table td:nth-child(3) { display: none; }
+
+    .cc-wrap {
+        max-width: 1560px;
+        margin: 0 auto;
+        padding: 20px clamp(14px, 2vw, 28px) 48px;
+        background: var(--cc-bg);
+        color: var(--cc-ink);
+        font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+
+    /* 1. Executive Command Bar */
+    .cc-topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+        padding: 16px 22px;
+        margin-bottom: 16px;
+        border-radius: 14px;
+        background: var(--cc-surface);
+        box-shadow: var(--cc-shadow);
+    }
+
+    .cc-top-left {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+    }
+
+    .cc-brand-badge {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        background: linear-gradient(135deg, #0f766e, #14b8a6);
+        color: #fff;
+        display: grid;
+        place-items: center;
+        font-size: 20px;
+        box-shadow: 0 6px 14px rgba(15, 118, 110, 0.28);
+        flex-shrink: 0;
+    }
+
+    .cc-top-title h1 {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        color: var(--cc-ink);
+    }
+
+    .cc-top-sub {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 3px;
+        font-size: 12px;
+        color: var(--cc-muted);
+        font-weight: 600;
+        flex-wrap: wrap;
+    }
+
+    .cc-live-dot {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: #059669;
+        font-weight: 700;
+    }
+
+    .cc-live-dot::before {
+        content: "";
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #10b981;
+        box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.22);
+    }
+
+    .cc-top-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .cc-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 9px 16px;
+        border-radius: 9px;
+        font-size: 12.5px;
+        font-weight: 700;
+        text-decoration: none;
+        white-space: nowrap;
+        transition: all 0.16s ease;
+    }
+
+    .cc-btn-primary {
+        background: var(--cc-primary);
+        color: #fff;
+        box-shadow: 0 4px 12px rgba(15, 118, 110, 0.24);
+    }
+
+    .cc-btn-primary:hover {
+        background: var(--cc-primary-dark);
+        color: #fff;
+        transform: translateY(-1px);
+    }
+
+    .cc-btn-light {
+        background: #f1f5f9;
+        color: var(--cc-ink-2);
+    }
+
+    .cc-btn-light:hover {
+        background: #e2e8f0;
+        color: var(--cc-ink);
+    }
+
+    /* Integrated Navigation Tabs */
+    .cc-nav-tabs {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        overflow-x: auto;
+        padding: 6px;
+        margin-bottom: 20px;
+        border-radius: 12px;
+        background: #e2e8f0;
+        width: fit-content;
+        max-width: 100%;
+        scrollbar-width: thin;
+    }
+
+    .cc-nav-tab {
+        display: inline-flex;
+        flex: 0 0 auto;
+        align-items: center;
+        gap: 8px;
+        height: 38px;
+        padding: 0 15px;
+        border: 0;
+        border-radius: 8px;
+        background: transparent;
+        color: #475569;
+        font: inherit;
+        font-size: 12.5px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.16s ease;
+    }
+
+    .cc-nav-tab:hover {
+        color: var(--cc-ink);
+        background: rgba(255, 255, 255, 0.65);
+    }
+
+    .cc-nav-tab[aria-selected="true"] {
+        background: var(--cc-surface);
+        color: var(--cc-primary);
+        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.1);
+    }
+
+    .cc-tab-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 22px;
+        height: 20px;
+        padding: 0 6px;
+        border-radius: 999px;
+        background: rgba(15, 23, 42, 0.08);
+        color: #475569;
+        font-size: 10.5px;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .cc-nav-tab[aria-selected="true"] .cc-tab-pill {
+        background: var(--cc-primary-soft);
+        color: var(--cc-primary);
+    }
+
+    .cc-tab-panel[hidden] {
+        display: none;
+    }
+
+    .cc-tab-panel {
+        animation: ccFade 0.18s ease-out;
+    }
+
+    @keyframes ccFade {
+        from { opacity: 0.45; transform: translateY(4px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .cc-alert {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 16px;
+        margin-bottom: 18px;
+        border-radius: 10px;
+        background: #fffbeb;
+        border-left: 4px solid #f59e0b;
+        color: #92400e;
+        font-size: 13px;
+        font-weight: 600;
+    }
+
+    /* Section Header */
+    .cc-sec-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin: 0 2px 12px;
+    }
+
+    .cc-sec-head h2 {
+        margin: 0;
+        font-size: 12.5px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: #475569;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+    }
+
+    .cc-sec-head h2 i {
+        color: var(--cc-primary);
+    }
+
+    .cc-sec-head span {
+        font-size: 11.5px;
+        color: var(--cc-muted);
+    }
+
+    /* Executive Bento Strip */
+    .cc-bento-top {
+        display: grid;
+        grid-template-columns: 420px minmax(0, 1fr);
+        gap: 18px;
+        margin-bottom: 24px;
+    }
+
+    .cc-card {
+        background: var(--cc-surface);
+        border-radius: 14px;
+        box-shadow: var(--cc-shadow);
+        overflow: hidden;
+        min-width: 0;
+    }
+
+    .cc-card-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 18px;
+        border-bottom: 1px solid #f1f5f9;
+    }
+
+    .cc-card-head h3 {
+        margin: 0;
+        font-size: 14px;
+        font-weight: 800;
+        color: var(--cc-ink);
+    }
+
+    .cc-card-head p {
+        margin: 2px 0 0;
+        font-size: 11.5px;
+        color: var(--cc-muted);
+    }
+
+    .cc-pill {
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: var(--cc-primary-soft);
+        color: var(--cc-primary);
+        font-size: 11px;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    .cc-ring-body {
+        padding: 14px 16px 18px;
+    }
+
+    .cc-ring-canvas {
+        position: relative;
+        width: 100%;
+        height: 215px;
+    }
+
+    .cc-ring-foot {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        margin-top: 8px;
+        padding-top: 12px;
+        border-top: 1px solid #f1f5f9;
+        text-align: center;
+    }
+
+    .cc-ring-stat span {
+        display: block;
+        font-size: 10.5px;
+        font-weight: 700;
+        text-transform: uppercase;
+        color: var(--cc-muted);
+    }
+
+    .cc-ring-stat strong {
+        display: block;
+        margin-top: 2px;
+        font-size: 17px;
+        font-weight: 800;
+        color: var(--cc-ink);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .cc-bento-right {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    .cc-kpi-4 {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+    }
+
+    .cc-kpi {
+        background: var(--cc-surface);
+        border-radius: 14px;
+        padding: 16px 18px;
+        box-shadow: var(--cc-shadow);
+        position: relative;
+        overflow: hidden;
+        transition: transform 0.16s ease, box-shadow 0.16s ease;
+    }
+
+    .cc-kpi:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--cc-shadow-hover);
+    }
+
+    .cc-kpi::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: var(--kpi-c, var(--cc-primary));
+    }
+
+    .cc-kpi-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+    }
+
+    .cc-kpi-lbl {
+        font-size: 11.5px;
+        font-weight: 700;
+        color: var(--cc-muted);
+    }
+
+    .cc-kpi-ic {
+        width: 32px;
+        height: 32px;
+        border-radius: 9px;
+        background: var(--kpi-bg, #f0fdfa);
+        color: var(--kpi-c, var(--cc-primary));
+        display: grid;
+        place-items: center;
+        font-size: 15px;
+    }
+
+    .cc-kpi-val {
+        display: block;
+        margin-top: 10px;
+        font-size: 28px;
+        font-weight: 800;
+        line-height: 1;
+        letter-spacing: -0.03em;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .cc-kpi-sub {
+        display: block;
+        margin-top: 6px;
+        font-size: 11px;
+        color: var(--cc-muted);
+    }
+
+    .cc-health-card {
+        background: var(--cc-surface);
+        border-radius: 14px;
+        padding: 16px 20px;
+        box-shadow: var(--cc-shadow);
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
+        flex: 1;
+        align-items: center;
+    }
+
+    .cc-health-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding-right: 12px;
+        border-right: 1px solid #f1f5f9;
+    }
+
+    .cc-health-item:last-child {
+        border-right: 0;
+        padding-right: 0;
+    }
+
+    .cc-health-ic {
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        background: #f8fafc;
+        color: var(--cc-primary);
+        display: grid;
+        place-items: center;
+        font-size: 18px;
+        flex-shrink: 0;
+    }
+
+    .cc-health-item span {
+        display: block;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--cc-muted);
+    }
+
+    .cc-health-item strong {
+        display: block;
+        font-size: 20px;
+        font-weight: 800;
+        color: var(--cc-ink);
+        line-height: 1.2;
+    }
+
+    .cc-health-item small a {
+        color: var(--cc-primary);
+        font-weight: 700;
+        text-decoration: none;
+        font-size: 11px;
+    }
+
+    /* All 6 Clinical Scales Live Matrix */
+    .cc-scales-grid {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 14px;
+        margin-bottom: 24px;
+    }
+
+    .cc-scale-tile {
+        background: var(--cc-surface);
+        border-radius: 14px;
+        padding: 15px 16px;
+        box-shadow: var(--cc-shadow);
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        border-top: 3px solid var(--sc-accent, var(--cc-primary));
+        transition: transform 0.16s ease, box-shadow 0.16s ease;
+    }
+
+    .cc-scale-tile:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--cc-shadow-hover);
+    }
+
+    .cc-scale-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 8px;
+    }
+
+    .cc-scale-code {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 13px;
+        font-weight: 800;
+        color: var(--cc-ink);
+    }
+
+    .cc-scale-code i {
+        color: var(--sc-accent, var(--cc-primary));
+        font-size: 15px;
+    }
+
+    .cc-scale-7d {
+        padding: 2px 7px;
+        border-radius: 999px;
+        background: #ecfdf5;
+        color: #047857;
+        font-size: 10px;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    .cc-scale-name {
+        font-size: 11px;
+        color: var(--cc-muted);
+        margin-bottom: 10px;
+        line-height: 1.3;
+    }
+
+    .cc-scale-num {
+        font-size: 26px;
+        font-weight: 800;
+        color: var(--cc-ink);
+        line-height: 1;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .cc-scale-meta {
+        margin-top: 6px;
+        font-size: 11px;
+        color: var(--cc-muted);
+        display: flex;
+        justify-content: space-between;
+    }
+
+    .cc-scale-meta strong {
+        color: var(--cc-ink-2);
+    }
+
+    .cc-scale-btns {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+        margin-top: 12px;
+        padding-top: 10px;
+        border-top: 1px solid #f1f5f9;
+    }
+
+    .cc-scale-btns a,
+    .cc-scale-btns button {
+        text-align: center;
+        padding: 5px 6px;
+        border-radius: 7px;
+        font-size: 11px;
+        font-weight: 700;
+        text-decoration: none;
+        border: 0;
+        cursor: pointer;
+        transition: all 0.14s ease;
+    }
+
+    .cc-scale-btns .is-new {
+        background: var(--cc-primary-soft);
+        color: var(--cc-primary);
+    }
+
+    .cc-scale-btns .is-new:hover {
+        background: var(--cc-primary);
+        color: #fff;
+    }
+
+    .cc-scale-btns .is-rec {
+        background: #f8fafc;
+        color: #475569;
+    }
+
+    .cc-scale-btns .is-rec:hover {
+        background: #e2e8f0;
+        color: var(--cc-ink);
+    }
+
+    /* Interactive Analytics Row */
+    .cc-analytics-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+        gap: 18px;
+        margin-bottom: 24px;
+    }
+
+    .cc-bar-box {
+        position: relative;
+        height: 290px;
+        padding: 16px 18px 12px;
+    }
+
+    .cc-switcher {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        background: #f1f5f9;
+        padding: 4px;
+        border-radius: 9px;
+    }
+
+    .cc-switch-btn {
+        border: 0;
+        background: transparent;
+        color: #475569;
+        font-size: 11px;
+        font-weight: 800;
+        padding: 5px 9px;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+    }
+
+    .cc-switch-btn:hover {
+        color: var(--cc-ink);
+    }
+
+    .cc-switch-btn.is-active {
+        background: #fff;
+        color: var(--cc-primary);
+        box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+    }
+
+    .cc-donut-box {
+        position: relative;
+        height: 290px;
+        padding: 10px 14px 14px;
+    }
+
+    /* Individual Scale Tab Dedicated Workspace */
+    .cc-inst-hero {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        flex-wrap: wrap;
+        padding: 20px 24px;
+        margin-bottom: 18px;
+        border-radius: 14px;
+        background: var(--cc-surface);
+        border-left: 5px solid var(--inst-accent, var(--cc-primary));
+        box-shadow: var(--cc-shadow);
+    }
+
+    .cc-inst-left {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+    }
+
+    .cc-inst-icon {
+        width: 50px;
+        height: 50px;
+        border-radius: 13px;
+        background: var(--cc-primary-soft);
+        color: var(--inst-accent, var(--cc-primary));
+        display: grid;
+        place-items: center;
+        font-size: 22px;
+        flex-shrink: 0;
+    }
+
+    .cc-inst-hero h2 {
+        margin: 0 0 4px;
+        font-size: 18px;
+        font-weight: 800;
+        color: var(--cc-ink);
+    }
+
+    .cc-inst-hero p {
+        margin: 0;
+        font-size: 12.5px;
+        color: var(--cc-muted);
+    }
+
+    .cc-inst-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .cc-inst-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
+        gap: 18px;
+        margin-top: 18px;
+    }
+
+    .cc-dist-body {
+        padding: 18px 22px 22px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        gap: 18px;
+    }
+
+    .cc-dist-list {
+        display: grid;
+        gap: 13px;
+    }
+
+    .cc-dist-row-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 12.5px;
+        margin-bottom: 5px;
+    }
+
+    .cc-dist-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 700;
+        color: var(--cc-ink-2);
+    }
+
+    .cc-dist-dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+    }
+
+    .cc-dist-val {
+        font-weight: 800;
+        color: var(--cc-ink);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .cc-dist-track {
+        height: 8px;
+        border-radius: 999px;
+        background: #edf2f7;
+        overflow: hidden;
+    }
+
+    .cc-dist-fill {
+        display: block;
+        height: 100%;
+        border-radius: 999px;
+    }
+
+    .cc-clinical-note {
+        padding: 14px 16px;
+        border-radius: 10px;
+        background: #f8fafc;
+        border-left: 3px solid var(--inst-accent, var(--cc-primary));
+        font-size: 12.5px;
+        line-height: 1.6;
+        color: var(--cc-muted);
+    }
+
+    /* Bottom Operational Grid */
+    .cc-ops-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.55fr) minmax(300px, 0.85fr);
+        gap: 18px;
+        align-items: start;
+    }
+
+    .cc-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .cc-table th {
+        padding: 11px 16px;
+        background: #f8fafc;
+        color: #64748b;
+        font-size: 10.5px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        text-align: left;
+        border-bottom: 1px solid #f1f5f9;
+    }
+
+    .cc-table td {
+        padding: 11px 16px;
+        font-size: 12.5px;
+        color: var(--cc-ink-2);
+        border-bottom: 1px solid #f1f5f9;
+        vertical-align: middle;
+    }
+
+    .cc-table tbody tr:hover {
+        background: #f8fafc;
+    }
+
+    .cc-table tbody tr:last-child td {
+        border-bottom: 0;
+    }
+
+    .cc-pt-cell {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .cc-avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 9px;
+        background: var(--cc-primary-soft);
+        color: var(--cc-primary);
+        font-size: 11px;
+        font-weight: 800;
+        display: grid;
+        place-items: center;
+        flex-shrink: 0;
+    }
+
+    .cc-pt-name {
+        display: block;
+        font-weight: 700;
+        color: var(--cc-ink);
+        line-height: 1.25;
+    }
+
+    .cc-pt-phone {
+        display: block;
+        font-size: 11px;
+        color: var(--cc-muted);
+    }
+
+    .cc-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .cc-status::before {
+        content: "";
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: currentColor;
+    }
+
+    .cc-status.is-done {
+        background: #ecfdf5;
+        color: #047857;
+    }
+
+    .cc-status.is-pend {
+        background: #fffbeb;
+        color: #b45309;
+    }
+
+    .cc-launch-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        padding: 16px 18px 18px;
+    }
+
+    .cc-launch-tile {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 11px 12px;
+        border-radius: 10px;
+        background: #f8fafc;
+        color: var(--cc-ink-2);
+        text-decoration: none;
+        font-size: 12px;
+        font-weight: 700;
+        transition: all 0.15s ease;
+    }
+
+    .cc-launch-tile i {
+        width: 30px;
+        height: 30px;
+        border-radius: 8px;
+        background: #fff;
+        color: var(--cc-primary);
+        display: grid;
+        place-items: center;
+        font-size: 14px;
+        box-shadow: 0 2px 5px rgba(15, 23, 42, 0.05);
+        flex-shrink: 0;
+    }
+
+    .cc-launch-tile:hover {
+        background: var(--cc-primary-soft);
+        color: var(--cc-primary);
+        transform: translateY(-1px);
+    }
+
+    .cc-empty {
+        padding: 36px 18px;
+        text-align: center;
+        color: var(--cc-muted);
+        font-size: 13px;
+    }
+
+    @media (max-width: 1280px) {
+        .cc-scales-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .cc-bento-top { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 960px) {
+        .cc-kpi-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .cc-analytics-row, .cc-ops-grid, .cc-inst-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 640px) {
+        .cc-wrap { padding: 14px 12px 32px; }
+        .cc-scales-grid, .cc-health-card, .cc-launch-grid { grid-template-columns: 1fr; }
+        .cc-health-item { border-right: 0; padding-right: 0; border-bottom: 1px solid #f1f5f9; padding-bottom: 12px; }
+        .cc-health-item:last-child { border-bottom: 0; padding-bottom: 0; }
+        .cc-table th:nth-child(3), .cc-table td:nth-child(3) { display: none; }
     }
 </style>
 
-<div class="dashboard-wrap">
-    <div class="dashboard-hero">
-        <div>
-            <div class="dashboard-eyebrow">Clinical assessment workspace</div>
-            <h1>Good day, <?php echo htmlspecialchars($_SESSION['name'] ?? 'Admin'); ?></h1>
-            <p>A clear overview of your patients, assessment activity, severity breakdowns, and follow-ups.</p>
-            <span class="dashboard-date"><i class="bi bi-calendar3" aria-hidden="true"></i><?php echo date('l, d F Y'); ?></span>
+<div class="cc-wrap">
+    <!-- 1. Executive Command Bar -->
+    <header class="cc-topbar">
+        <div class="cc-top-left">
+            <div class="cc-brand-badge"><i class="bi bi-hospital" aria-hidden="true"></i></div>
+            <div class="cc-top-title">
+                <h1>Clinical Command Center &mdash; <?php echo dash_e($_SESSION['name'] ?? 'Admin'); ?></h1>
+                <div class="cc-top-sub">
+                    <span class="cc-live-dot">Workspace Active</span>
+                    <span><i class="bi bi-calendar3" aria-hidden="true"></i> <?php echo date('l, d F Y'); ?></span>
+                    <span><i class="bi bi-layers" aria-hidden="true"></i> 6 Psychiatric Scales</span>
+                </div>
+            </div>
         </div>
-        <a class="dashboard-action" href="assign-assessments.php"><i class="bi bi-plus-lg" aria-hidden="true"></i> Assign assessment</a>
-    </div>
+        <div class="cc-top-actions">
+            <a class="cc-btn cc-btn-light" href="public-assessment-form.php"><i class="bi bi-person-vcard" aria-hidden="true"></i> Patient Portal</a>
+            <a class="cc-btn cc-btn-light" href="all-assessment-records.php"><i class="bi bi-table" aria-hidden="true"></i> All Assignments</a>
+            <a class="cc-btn cc-btn-primary" href="assign-assessments.php"><i class="bi bi-plus-lg" aria-hidden="true"></i> Assign Assessment</a>
+        </div>
+    </header>
 
     <?php if (!empty($dashboard_errors)): ?>
-        <div class="dashboard-alert" role="alert"><?php echo htmlspecialchars(implode(' ', $dashboard_errors), ENT_QUOTES, 'UTF-8'); ?></div>
+        <div class="cc-alert" role="alert">
+            <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
+            <span><?php echo dash_e(implode(' ', $dashboard_errors)); ?></span>
+        </div>
     <?php endif; ?>
 
-    <!-- Dashboard Tabs -->
-    <div class="dashboard-tabs" role="tablist" aria-label="Assessment dashboard sections">
-        <button class="dashboard-tab" id="tab-overview" type="button" role="tab" aria-selected="true" aria-controls="panel-overview" tabindex="0"><i class="bi bi-grid-1x2" aria-hidden="true"></i> Overview</button>
-        <button class="dashboard-tab" id="tab-bai" type="button" role="tab" aria-selected="false" aria-controls="panel-bai" tabindex="-1">BAI <span class="dashboard-tab-count"><?php echo $beck_stats_loaded ? (int) $beck_stats['bai']['records'] : '—'; ?></span></button>
-        <button class="dashboard-tab" id="tab-bdi" type="button" role="tab" aria-selected="false" aria-controls="panel-bdi" tabindex="-1">BDI <span class="dashboard-tab-count"><?php echo $beck_stats_loaded ? (int) $beck_stats['bdi']['records'] : '—'; ?></span></button>
-        <button class="dashboard-tab" id="tab-bprs" type="button" role="tab" aria-selected="false" aria-controls="panel-bprs" tabindex="-1">BPRS <span class="dashboard-tab-count"><?php echo $module_stats['bprs']['total'] === null ? '—' : (int) $module_stats['bprs']['total']; ?></span></button>
-        <button class="dashboard-tab" id="tab-panss" type="button" role="tab" aria-selected="false" aria-controls="panel-panss" tabindex="-1">PANSS <span class="dashboard-tab-count"><?php echo $module_stats['panss']['total'] === null ? '—' : (int) $module_stats['panss']['total']; ?></span></button>
-        <button class="dashboard-tab" id="tab-ymrs" type="button" role="tab" aria-selected="false" aria-controls="panel-ymrs" tabindex="-1">YMRS <span class="dashboard-tab-count"><?php echo $module_stats['ymrs']['total'] === null ? '—' : (int) $module_stats['ymrs']['total']; ?></span></button>
-        <button class="dashboard-tab" id="tab-ace_iii" type="button" role="tab" aria-selected="false" aria-controls="panel-ace_iii" tabindex="-1">ACE-III <span class="dashboard-tab-count"><?php echo $module_stats['ace_iii']['total'] === null ? '—' : (int) $module_stats['ace_iii']['total']; ?></span></button>
-    </div>
+    <!-- 2. Integrated Navigation Tabs (Overview + 6 Individual Scale Workspaces) -->
+    <nav class="cc-nav-tabs" role="tablist" aria-label="Dashboard sections">
+        <button class="cc-nav-tab" id="tab-overview" type="button" role="tab" aria-selected="true" aria-controls="panel-overview" tabindex="0">
+            <i class="bi bi-grid-1x2-fill" aria-hidden="true"></i> Overview
+        </button>
+        <?php foreach ($scale_tabs as $st): ?>
+            <button class="cc-nav-tab" id="tab-<?php echo dash_e($st['id']); ?>" type="button" role="tab" aria-selected="false" aria-controls="panel-<?php echo dash_e($st['id']); ?>" tabindex="-1">
+                <?php echo dash_e($st['code']); ?>
+                <span class="cc-tab-pill"><?php echo $st['tab_count'] === null ? '—' : (int) $st['tab_count']; ?></span>
+            </button>
+        <?php endforeach; ?>
+    </nav>
 
-    <!-- OVERVIEW PANEL -->
-    <section class="dashboard-tab-panel" id="panel-overview" role="tabpanel" aria-labelledby="tab-overview" tabindex="0">
-        <div class="section-kicker">
-            <strong><i class="bi bi-grid-1x2-fill" aria-hidden="true"></i> At a glance</strong>
-            <span>Workspace performance and patient activity</span>
-        </div>
-
-        <div class="metric-grid">
-            <div class="metric-card"><div class="metric-top"><span class="metric-label">Registered patients</span><span class="metric-icon"><i class="bi bi-people" aria-hidden="true"></i></span></div><strong class="metric-value"><?php echo (int) $stats['patients']; ?></strong><span class="metric-foot">In your patient workspace</span></div>
-            <div class="metric-card"><div class="metric-top"><span class="metric-label">Total assignments</span><span class="metric-icon"><i class="bi bi-clipboard2-check" aria-hidden="true"></i></span></div><strong class="metric-value"><?php echo (int) $stats['assigned']; ?></strong><span class="metric-foot">Across all assessments</span></div>
-            <div class="metric-card"><div class="metric-top"><span class="metric-label">Awaiting response</span><span class="metric-icon"><i class="bi bi-hourglass-split" aria-hidden="true"></i></span></div><strong class="metric-value"><?php echo (int) $stats['pending']; ?></strong><span class="metric-foot">Follow-up may be needed</span></div>
-            <div class="metric-card"><div class="metric-top"><span class="metric-label">Completed</span><span class="metric-icon"><i class="bi bi-check2-circle" aria-hidden="true"></i></span></div><strong class="metric-value"><?php echo (int) $stats['completed']; ?></strong><span class="metric-foot"><?php echo $completion_rate; ?>% assignment completion</span></div>
-        </div>
-
-        <div class="analytics-grid">
-            <section class="chart-card">
-                <div class="chart-heading">
-                    <div><h2>Assignment status</h2><p>Completed versus awaiting response</p></div>
-                    <span class="chart-total"><?php echo (int) $stats['assigned']; ?> total</span>
+    <!-- ==================== OVERVIEW TAB PANEL ==================== -->
+    <section class="cc-tab-panel" id="panel-overview" role="tabpanel" aria-labelledby="tab-overview" tabindex="0">
+        <!-- Executive Bento Strip -->
+        <div class="cc-bento-top">
+            <!-- Left: Assignment Completion Ring with Callout Labels -->
+            <section class="cc-card">
+                <div class="cc-card-head">
+                    <div>
+                        <h3>Assignment Completion</h3>
+                        <p>Completed vs awaiting responses</p>
+                    </div>
+                    <span class="cc-pill"><?php echo $completion_rate; ?>% Done</span>
                 </div>
-                <div class="chart-canvas-wrap doughnut-wrap">
-                    <canvas id="assignmentStatusChart" role="img" aria-label="Doughnut chart showing completed and pending assignments"></canvas>
-                </div>
-                <div class="chart-legend" aria-hidden="true">
-                    <span class="legend-item"><span class="legend-dot" style="background:#0f766e"></span>Completed (<?php echo (int) $stats['completed']; ?>)</span>
-                    <span class="legend-item"><span class="legend-dot" style="background:#f2b84b"></span>Awaiting (<?php echo (int) $stats['pending']; ?>)</span>
+                <div class="cc-ring-body">
+                    <div class="cc-ring-canvas">
+                        <canvas id="ccCompletionRing" role="img" aria-label="Assignment completion doughnut chart"></canvas>
+                    </div>
+                    <div class="cc-ring-foot">
+                        <div class="cc-ring-stat">
+                            <span>Total</span>
+                            <strong><?php echo (int) $stats['assigned']; ?></strong>
+                        </div>
+                        <div class="cc-ring-stat">
+                            <span>Completed</span>
+                            <strong style="color:#0f766e;"><?php echo (int) $stats['completed']; ?></strong>
+                        </div>
+                        <div class="cc-ring-stat">
+                            <span>Pending</span>
+                            <strong style="color:#d97706;"><?php echo (int) $stats['pending']; ?></strong>
+                        </div>
+                    </div>
                 </div>
             </section>
-            <section class="chart-card">
-                <div class="chart-heading">
-                    <div><h2>Assessment activity</h2><p>Saved records and activity in the last 7 days</p></div>
-                    <span class="chart-total">6 assessment scales</span>
+
+            <!-- Right: 4 KPIs + Workspace Health Strip -->
+            <div class="cc-bento-right">
+                <div class="cc-kpi-4">
+                    <div class="cc-kpi" style="--kpi-c:#0f766e; --kpi-bg:#f0fdfa;">
+                        <div class="cc-kpi-row">
+                            <span class="cc-kpi-lbl">Patients</span>
+                            <span class="cc-kpi-ic"><i class="bi bi-people-fill"></i></span>
+                        </div>
+                        <strong class="cc-kpi-val"><?php echo (int) $stats['patients']; ?></strong>
+                        <span class="cc-kpi-sub">Registered in workspace</span>
+                    </div>
+
+                    <div class="cc-kpi" style="--kpi-c:#4f46e5; --kpi-bg:#eef2ff;">
+                        <div class="cc-kpi-row">
+                            <span class="cc-kpi-lbl">Assigned</span>
+                            <span class="cc-kpi-ic"><i class="bi bi-clipboard2-check-fill"></i></span>
+                        </div>
+                        <strong class="cc-kpi-val"><?php echo (int) $stats['assigned']; ?></strong>
+                        <span class="cc-kpi-sub">Total assessments</span>
+                    </div>
+
+                    <div class="cc-kpi" style="--kpi-c:#d97706; --kpi-bg:#fffbeb;">
+                        <div class="cc-kpi-row">
+                            <span class="cc-kpi-lbl">Awaiting</span>
+                            <span class="cc-kpi-ic"><i class="bi bi-hourglass-split"></i></span>
+                        </div>
+                        <strong class="cc-kpi-val"><?php echo (int) $stats['pending']; ?></strong>
+                        <span class="cc-kpi-sub">Follow-up needed</span>
+                    </div>
+
+                    <div class="cc-kpi" style="--kpi-c:#059669; --kpi-bg:#ecfdf5;">
+                        <div class="cc-kpi-row">
+                            <span class="cc-kpi-lbl">Completed</span>
+                            <span class="cc-kpi-ic"><i class="bi bi-check-circle-fill"></i></span>
+                        </div>
+                        <strong class="cc-kpi-val"><?php echo (int) $stats['completed']; ?></strong>
+                        <span class="cc-kpi-sub"><?php echo $completion_rate; ?>% rate</span>
+                    </div>
                 </div>
-                <div class="chart-canvas-wrap">
-                    <canvas id="assessmentActivityChart" role="img" aria-label="Bar chart comparing BAI, BDI, BPRS, PANSS, YMRS, and ACE-III assessment records"></canvas>
+
+                <div class="cc-health-card">
+                    <div class="cc-health-item">
+                        <span class="cc-health-ic"><i class="bi bi-journals"></i></span>
+                        <div>
+                            <span>Assessment Library</span>
+                            <strong><?php echo $workspace_stats['assessment_catalog'] === null ? '—' : (int) $workspace_stats['assessment_catalog']; ?></strong>
+                            <small style="color:var(--cc-muted);font-size:11px;">Configured scales</small>
+                        </div>
+                    </div>
+                    <div class="cc-health-item">
+                        <span class="cc-health-ic"><i class="bi bi-file-earmark-medical"></i></span>
+                        <div>
+                            <span>Submitted Reports</span>
+                            <strong><?php echo $workspace_stats['responses'] === null ? '—' : (int) $workspace_stats['responses']; ?></strong>
+                            <small style="color:var(--cc-muted);font-size:11px;">Saved clinical responses</small>
+                        </div>
+                    </div>
+                    <div class="cc-health-item">
+                        <span class="cc-health-ic"><i class="bi bi-journal-text"></i></span>
+                        <div>
+                            <span>Question Bank</span>
+                            <strong><?php echo $workspace_stats['questions'] === null ? '—' : (int) $workspace_stats['questions']; ?></strong>
+                            <small><a href="view-assessment-questions.php">Manage questions <i class="bi bi-arrow-up-right"></i></a></small>
+                        </div>
+                    </div>
                 </div>
-                <div class="chart-legend" aria-hidden="true">
-                    <span class="legend-item"><span class="legend-dot" style="background:#4f46e5"></span>Total records</span>
-                    <span class="legend-item"><span class="legend-dot" style="background:#06b6d4"></span>Last 7 days</span>
+            </div>
+        </div>
+
+        <!-- All 6 Clinical Scales Live Matrix -->
+        <div class="cc-sec-head">
+            <h2><i class="bi bi-grid-3x3-gap-fill" aria-hidden="true"></i> Clinical Scales Matrix (All 6 Instruments)</h2>
+            <span>Click Details to open any scale's dedicated workspace</span>
+        </div>
+
+        <div class="cc-scales-grid">
+            <?php foreach ($scale_tabs as $sc): ?>
+                <article class="cc-scale-tile" style="--sc-accent: <?php echo dash_e($sc['accent']); ?>;">
+                    <div>
+                        <div class="cc-scale-top">
+                            <span class="cc-scale-code">
+                                <i class="bi <?php echo dash_e($sc['icon']); ?>" aria-hidden="true"></i>
+                                <?php echo dash_e($sc['code']); ?>
+                            </span>
+                            <span class="cc-scale-7d">+<?php echo (int) $sc['recent']; ?> (7d)</span>
+                        </div>
+                        <div class="cc-scale-name"><?php echo dash_e($sc['short_name']); ?></div>
+                        <div class="cc-scale-num"><?php echo $sc['tab_count'] === null ? '—' : (int) $sc['tab_count']; ?></div>
+                        <div class="cc-scale-meta">
+                            <span><?php echo dash_e($sc['meta_label']); ?></span>
+                            <strong><?php echo dash_e($sc['meta_val']); ?></strong>
+                        </div>
+                    </div>
+                    <div class="cc-scale-btns">
+                        <button type="button" class="is-new cc-open-tab-btn" data-target-tab="tab-<?php echo dash_e($sc['id']); ?>">Details</button>
+                        <a class="is-rec" href="<?php echo dash_e($sc['rec_url']); ?>">Records</a>
+                    </div>
+                </article>
+            <?php endforeach; ?>
+        </div>
+
+        <!-- Interactive Analytics Row -->
+        <div class="cc-sec-head">
+            <h2><i class="bi bi-pie-chart-fill" aria-hidden="true"></i> Clinical Analytics &amp; Severity Distribution</h2>
+            <span>Switch any scale to inspect slice-by-slice breakdown</span>
+        </div>
+
+        <div class="cc-analytics-row">
+            <section class="cc-card">
+                <div class="cc-card-head">
+                    <div>
+                        <h3>Assessment Volume vs Last 7 Days</h3>
+                        <p>Comparison across BAI, BDI, BPRS, PANSS, YMRS, and ACE-III</p>
+                    </div>
+                    <span class="cc-pill">6 Scales</span>
                 </div>
-                <div class="chart-note">Click any scale tab above to view its dedicated pie chart and clinical breakdown.</div>
-                <div class="chart-links">
-                    <a href="bprs-assessment-records.php">BPRS records <i class="bi bi-arrow-up-right" aria-hidden="true"></i></a>
-                    <a href="panss-assessment-records.php">PANSS records <i class="bi bi-arrow-up-right" aria-hidden="true"></i></a>
-                    <a href="ymrs-assessment-records.php">YMRS records <i class="bi bi-arrow-up-right" aria-hidden="true"></i></a>
-                    <a href="ace-iii-assessment-records.php">ACE-III records <i class="bi bi-arrow-up-right" aria-hidden="true"></i></a>
+                <div class="cc-bar-box">
+                    <canvas id="ccVolumeBarChart" role="img" aria-label="Assessment volume comparison bar chart"></canvas>
+                </div>
+            </section>
+
+            <section class="cc-card">
+                <div class="cc-card-head" style="flex-wrap: wrap;">
+                    <div>
+                        <h3 id="ccScalePieTitle">BPRS Severity Breakdown</h3>
+                        <p id="ccScalePieSub">Distribution of saved ratings by clinical severity band</p>
+                    </div>
+                    <div class="cc-switcher" role="tablist" aria-label="Select scale chart">
+                        <button type="button" class="cc-switch-btn" data-scale="bai">BAI</button>
+                        <button type="button" class="cc-switch-btn" data-scale="bdi">BDI</button>
+                        <button type="button" class="cc-switch-btn is-active" data-scale="bprs">BPRS</button>
+                        <button type="button" class="cc-switch-btn" data-scale="panss">PANSS</button>
+                        <button type="button" class="cc-switch-btn" data-scale="ymrs">YMRS</button>
+                        <button type="button" class="cc-switch-btn" data-scale="ace_iii">ACE-III</button>
+                    </div>
+                </div>
+                <div class="cc-donut-box">
+                    <canvas id="ccScalePieChart" role="img" aria-label="Scale breakdown doughnut chart with callout labels"></canvas>
                 </div>
             </section>
         </div>
 
-        <div class="workspace-summary-grid">
-            <div class="workspace-summary"><span><i class="bi bi-journals" aria-hidden="true"></i> Assessment library</span><strong><?php echo $workspace_stats['assessment_catalog'] === null ? '—' : (int) $workspace_stats['assessment_catalog']; ?></strong><small>available assessments</small></div>
-            <div class="workspace-summary"><span><i class="bi bi-file-earmark-medical" aria-hidden="true"></i> Submitted reports</span><strong><?php echo $workspace_stats['responses'] === null ? '—' : (int) $workspace_stats['responses']; ?></strong><small>saved responses</small></div>
-            <div class="workspace-summary"><span><i class="bi bi-journal-text" aria-hidden="true"></i> Question bank</span><strong><?php echo $workspace_stats['questions'] === null ? '—' : (int) $workspace_stats['questions']; ?></strong><small><a href="view-assessment-questions.php">manage assessment questions <i class="bi bi-arrow-up-right" aria-hidden="true"></i></a></small></div>
-        </div>
-
-        <div class="dashboard-content-grid">
-            <section class="dashboard-panel">
-                <div class="panel-heading"><h2>Recent assignments</h2><a href="assigned-assessments.php">View all <i class="bi bi-arrow-right" aria-hidden="true"></i></a></div>
+        <!-- Operational Grid: Recent Assignments + Quick Launchpad -->
+        <div class="cc-ops-grid">
+            <section class="cc-card">
+                <div class="cc-card-head">
+                    <div>
+                        <h3>Recent Patient Assignments</h3>
+                        <p>Latest 8 assigned assessments in your workspace</p>
+                    </div>
+                    <a href="assigned-assessments.php" style="font-size:12px;font-weight:700;color:var(--cc-primary);text-decoration:none;">View all <i class="bi bi-arrow-right"></i></a>
+                </div>
                 <?php if (empty($recent_assignments)): ?>
-                    <div class="empty-state">No assessment assignments have been created yet.</div>
+                    <div class="cc-empty">No assessment assignments have been created yet.</div>
                 <?php else: ?>
                     <div class="table-responsive">
-                        <table class="assignment-table">
-                            <thead><tr><th>Patient</th><th>Assessment</th><th>Assigned</th><th>Status</th></tr></thead>
-                            <tbody>
-                            <?php foreach ($recent_assignments as $assignment): ?>
+                        <table class="cc-table">
+                            <thead>
                                 <tr>
-                                    <td><span class="patient-name"><?php echo htmlspecialchars(trim($assignment['patient_name']) ?: 'Unnamed patient'); ?></span><br><small><?php echo htmlspecialchars($assignment['phone'] ?? ''); ?></small></td>
-                                    <td><?php echo htmlspecialchars($assignment['title']); ?></td>
-                                    <td><?php echo !empty($assignment['assigned_date']) ? date('d M Y', strtotime($assignment['assigned_date'])) : 'Recently'; ?></td>
-                                    <td><span class="status <?php echo $assignment['status'] === 'completed' ? 'completed' : 'pending'; ?>"><?php echo $assignment['status'] === 'completed' ? 'Completed' : 'Pending'; ?></span></td>
+                                    <th>Patient</th>
+                                    <th>Assessment</th>
+                                    <th>Assigned Date</th>
+                                    <th>Status</th>
                                 </tr>
-                            <?php endforeach; ?>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($recent_assignments as $row):
+                                    $p_name = trim($row['patient_name']) ?: 'Unnamed patient';
+                                    $is_done = ($row['status'] === 'completed');
+                                ?>
+                                    <tr>
+                                        <td>
+                                            <div class="cc-pt-cell">
+                                                <span class="cc-avatar"><?php echo dash_e(dash_initials($p_name)); ?></span>
+                                                <div>
+                                                    <span class="cc-pt-name"><?php echo dash_e($p_name); ?></span>
+                                                    <span class="cc-pt-phone"><?php echo dash_e($row['phone'] ?? ''); ?></span>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td style="font-weight:600;color:#1e293b;"><?php echo dash_e($row['title']); ?></td>
+                                        <td><?php echo !empty($row['assigned_date']) ? date('d M Y', strtotime($row['assigned_date'])) : 'Recently'; ?></td>
+                                        <td>
+                                            <span class="cc-status <?php echo $is_done ? 'is-done' : 'is-pend'; ?>">
+                                                <?php echo $is_done ? 'Completed' : 'Pending'; ?>
+                                            </span>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
                             </tbody>
                         </table>
                     </div>
                 <?php endif; ?>
             </section>
 
-            <aside class="dashboard-panel">
-                <div class="panel-heading"><h2>Completion overview</h2></div>
-                <div class="progress-panel">
-                    <div class="progress-heading"><span>Overall completion</span><strong><?php echo $completion_rate; ?>%</strong></div>
-                    <div class="progress-track" role="progressbar" aria-valuenow="<?php echo $completion_rate; ?>" aria-valuemin="0" aria-valuemax="100" aria-label="Assignment completion">
-                        <div class="progress-fill"></div>
+            <aside class="cc-card">
+                <div class="cc-card-head">
+                    <div>
+                        <h3>Clinical Launchpad</h3>
+                        <p>Instant access to forms &amp; registries</p>
                     </div>
-                    <p class="progress-copy"><?php echo (int) $stats['completed']; ?> of <?php echo (int) $stats['assigned']; ?> assignments completed. <?php echo (int) $stats['pending']; ?> still awaiting a response.</p>
-                    <div class="quick-title">Quick access</div>
-                    <div class="quick-links">
-                        <a class="quick-link" href="public-assessment-form.php"><i class="bi bi-person-vcard"></i> Open patient assessments</a>
-                        <a class="quick-link" href="assigned-assessments.php"><i class="bi bi-table"></i> View all assignment records</a>
-                        <a class="quick-link" href="panss-assessments.php"><i class="bi bi-activity"></i> New PANSS assessment</a>
-                        <a class="quick-link" href="bprs-assessments.php"><i class="bi bi-clipboard2-pulse"></i> New BPRS assessment</a>
-                        <a class="quick-link" href="ymrs-assessments.php"><i class="bi bi-speedometer2"></i> New YMRS assessment</a>
-                        <a class="quick-link" href="ace-iii-assessments.php"><i class="bi bi-cpu"></i> New ACE-III assessment</a>
-                        <a class="quick-link" href="view-assessment-questions.php"><i class="bi bi-journal-text"></i> Manage question bank</a>
-                    </div>
+                </div>
+                <div class="cc-launch-grid">
+                    <a class="cc-launch-tile" href="bdi-assessments.php"><i class="bi bi-clipboard2-heart"></i> New BDI</a>
+                    <a class="cc-launch-tile" href="bai-assessments.php"><i class="bi bi-heart-pulse"></i> New BAI</a>
+                    <a class="cc-launch-tile" href="bprs-assessments.php"><i class="bi bi-clipboard2-pulse"></i> New BPRS</a>
+                    <a class="cc-launch-tile" href="panss-assessments.php"><i class="bi bi-activity"></i> New PANSS</a>
+                    <a class="cc-launch-tile" href="ymrs-assessments.php"><i class="bi bi-speedometer2"></i> New YMRS</a>
+                    <a class="cc-launch-tile" href="ace-iii-assessments.php"><i class="bi bi-cpu"></i> New ACE-III</a>
+                    <a class="cc-launch-tile" href="assigned-assessments.php"><i class="bi bi-table"></i> All Records</a>
+                    <a class="cc-launch-tile" href="view-assessment-questions.php"><i class="bi bi-journal-text"></i> Question Bank</a>
                 </div>
             </aside>
         </div>
     </section>
 
-    <!-- INDIVIDUAL SCALE TABS WITH DEDICATED PIE CHARTS -->
+    <!-- ==================== INDIVIDUAL SCALE TAB PANELS ==================== -->
     <?php foreach ($scale_tabs as $scale):
         $sid = $scale['id'];
         $pie_cfg = $tab_charts_config[$sid];
+        $dist_total = array_sum($pie_cfg['values']);
     ?>
-        <section class="dashboard-tab-panel" id="panel-<?php echo htmlspecialchars($sid, ENT_QUOTES, 'UTF-8'); ?>" role="tabpanel" aria-labelledby="tab-<?php echo htmlspecialchars($sid, ENT_QUOTES, 'UTF-8'); ?>" tabindex="0" hidden>
-            <header class="scale-intro">
-                <div class="scale-intro-main">
-                    <span class="scale-intro-icon"><i class="bi <?php echo htmlspecialchars($scale['icon'], ENT_QUOTES, 'UTF-8'); ?>" aria-hidden="true"></i></span>
+        <section class="cc-tab-panel" id="panel-<?php echo dash_e($sid); ?>" role="tabpanel" aria-labelledby="tab-<?php echo dash_e($sid); ?>" tabindex="0" hidden>
+            <!-- Instrument Hero -->
+            <header class="cc-inst-hero" style="--inst-accent: <?php echo dash_e($scale['accent']); ?>;">
+                <div class="cc-inst-left">
+                    <span class="cc-inst-icon"><i class="bi <?php echo dash_e($scale['icon']); ?>" aria-hidden="true"></i></span>
                     <div>
-                        <h2><?php echo htmlspecialchars($scale['title'], ENT_QUOTES, 'UTF-8'); ?></h2>
-                        <p><?php echo htmlspecialchars($scale['description'], ENT_QUOTES, 'UTF-8'); ?></p>
+                        <h2><?php echo dash_e($scale['title']); ?></h2>
+                        <p><?php echo dash_e($scale['description']); ?></p>
                     </div>
                 </div>
-                <span class="scale-intro-badge"><?php echo htmlspecialchars((string) $scale['badge'], ENT_QUOTES, 'UTF-8'); ?></span>
+                <div class="cc-inst-actions">
+                    <a class="cc-btn cc-btn-primary" href="<?php echo dash_e($scale['new_url']); ?>">
+                        <i class="bi bi-plus-circle" aria-hidden="true"></i> <?php echo dash_e($scale['new_label']); ?>
+                    </a>
+                    <a class="cc-btn cc-btn-light" href="<?php echo dash_e($scale['rec_url']); ?>">
+                        <i class="bi bi-table" aria-hidden="true"></i> <?php echo dash_e($scale['rec_label']); ?>
+                    </a>
+                </div>
             </header>
 
-            <div class="scale-stat-grid">
+            <!-- 4-Column Scale KPIs -->
+            <div class="cc-kpi-4">
                 <?php foreach ($scale['metrics'] as $metric): ?>
-                    <div class="scale-stat">
-                        <span class="scale-stat-label"><i class="bi <?php echo htmlspecialchars($metric[2], ENT_QUOTES, 'UTF-8'); ?>" aria-hidden="true"></i><?php echo htmlspecialchars($metric[0], ENT_QUOTES, 'UTF-8'); ?></span>
-                        <strong class="scale-stat-value"><?php echo $metric[1] === null ? '—' : htmlspecialchars((string) $metric[1], ENT_QUOTES, 'UTF-8'); ?></strong>
+                    <div class="cc-kpi" style="--kpi-c: <?php echo dash_e($scale['accent']); ?>; --kpi-bg: #f8fafc;">
+                        <div class="cc-kpi-row">
+                            <span class="cc-kpi-lbl"><?php echo dash_e($metric[0]); ?></span>
+                            <span class="cc-kpi-ic"><i class="bi <?php echo dash_e($metric[2]); ?>" aria-hidden="true"></i></span>
+                        </div>
+                        <strong class="cc-kpi-val"><?php echo $metric[1] === null ? '—' : dash_e($metric[1]); ?></strong>
+                        <span class="cc-kpi-sub"><?php echo dash_e($metric[3]); ?></span>
                     </div>
                 <?php endforeach; ?>
             </div>
 
-            <div class="scale-analytics-grid">
-                <!-- Left: Dedicated Pie/Doughnut Chart -->
-                <div class="scale-pie-card">
-                    <div class="chart-heading">
+            <!-- 2-Column Deep-Dive: Callout Doughnut + Distribution Bars -->
+            <div class="cc-inst-grid" style="--inst-accent: <?php echo dash_e($scale['accent']); ?>;">
+                <section class="cc-card">
+                    <div class="cc-card-head">
                         <div>
-                            <h2><?php echo htmlspecialchars($pie_cfg['title'], ENT_QUOTES, 'UTF-8'); ?></h2>
-                            <p><?php echo htmlspecialchars($pie_cfg['subtitle'], ENT_QUOTES, 'UTF-8'); ?></p>
+                            <h3><?php echo dash_e($pie_cfg['title']); ?></h3>
+                            <p><?php echo dash_e($pie_cfg['subtitle']); ?></p>
+                        </div>
+                        <span class="cc-pill"><?php echo dash_e($scale['badge']); ?></span>
+                    </div>
+                    <div class="cc-donut-box">
+                        <canvas id="tabPieChart_<?php echo dash_e($sid); ?>" role="img" aria-label="<?php echo dash_e($pie_cfg['title']); ?>"></canvas>
+                    </div>
+                </section>
+
+                <section class="cc-card">
+                    <div class="cc-card-head">
+                        <div>
+                            <h3>Detailed Distribution &amp; Clinical Notes</h3>
+                            <p>Percentage share across each category</p>
                         </div>
                     </div>
-                    <div class="scale-pie-body">
-                        <div class="scale-pie-wrap">
-                            <canvas id="pieChart_<?php echo htmlspecialchars($sid, ENT_QUOTES, 'UTF-8'); ?>" role="img" aria-label="<?php echo htmlspecialchars($pie_cfg['title'], ENT_QUOTES, 'UTF-8'); ?>"></canvas>
-                        </div>
-                        <div class="scale-legend-list">
-                            <?php foreach ($pie_cfg['labels'] as $idx => $lbl): ?>
-                                <div class="scale-legend-row">
-                                    <span class="scale-legend-left">
-                                        <span class="scale-legend-dot" style="background: <?php echo htmlspecialchars($pie_cfg['colors'][$idx], ENT_QUOTES, 'UTF-8'); ?>;"></span>
-                                        <span><?php echo htmlspecialchars($lbl, ENT_QUOTES, 'UTF-8'); ?></span>
-                                    </span>
-                                    <span class="scale-legend-val"><?php echo htmlspecialchars((string) $pie_cfg['values'][$idx], ENT_QUOTES, 'UTF-8'); ?></span>
+                    <div class="cc-dist-body">
+                        <div class="cc-dist-list">
+                            <?php foreach ($pie_cfg['labels'] as $idx => $lbl):
+                                $val = (float) ($pie_cfg['values'][$idx] ?? 0);
+                                $pct = $dist_total > 0 ? round(($val / $dist_total) * 100) : 0;
+                                $clr = $pie_cfg['colors'][$idx] ?? '#0f766e';
+                            ?>
+                                <div>
+                                    <div class="cc-dist-row-top">
+                                        <span class="cc-dist-label">
+                                            <span class="cc-dist-dot" style="background: <?php echo dash_e($clr); ?>;"></span>
+                                            <?php echo dash_e($lbl); ?>
+                                        </span>
+                                        <span class="cc-dist-val"><?php echo dash_e($val); ?> (<?php echo $pct; ?>%)</span>
+                                    </div>
+                                    <div class="cc-dist-track">
+                                        <span class="cc-dist-fill" style="width: <?php echo $pct; ?>%; background: <?php echo dash_e($clr); ?>;"></span>
+                                    </div>
                                 </div>
                             <?php endforeach; ?>
                         </div>
-                    </div>
-                </div>
 
-                <!-- Right: Clinical Overview & Direct Actions -->
-                <div class="scale-summary-card">
-                    <div class="chart-heading">
-                        <div>
-                            <h2><?php echo htmlspecialchars($scale['summary_title'], ENT_QUOTES, 'UTF-8'); ?></h2>
-                            <p>Quick actions and scale insights</p>
+                        <div class="cc-clinical-note">
+                            <strong style="display:block;color:var(--cc-ink);margin-bottom:4px;"><?php echo dash_e($scale['summary_title']); ?></strong>
+                            <?php echo dash_e($scale['summary']); ?>
                         </div>
                     </div>
-                    <div class="scale-summary-body">
-                        <h3><?php echo htmlspecialchars($scale['title'], ENT_QUOTES, 'UTF-8'); ?></h3>
-                        <p><?php echo htmlspecialchars($scale['summary'], ENT_QUOTES, 'UTF-8'); ?></p>
-                        <div class="scale-actions">
-                            <?php foreach ($scale['actions'] as $a_idx => $action): ?>
-                                <a class="scale-action<?php echo $a_idx > 0 ? ' secondary' : ''; ?>" href="<?php echo htmlspecialchars($action[1], ENT_QUOTES, 'UTF-8'); ?>">
-                                    <i class="bi <?php echo htmlspecialchars($action[2], ENT_QUOTES, 'UTF-8'); ?>" aria-hidden="true"></i>
-                                    <?php echo htmlspecialchars($action[0], ENT_QUOTES, 'UTF-8'); ?>
-                                </a>
-                            <?php endforeach; ?>
-                        </div>
-                    </div>
-                </div>
+                </section>
             </div>
         </section>
     <?php endforeach; ?>
@@ -821,164 +1854,154 @@ require 'layout/base.php';
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    if (typeof Chart === 'undefined') return;
+
     const assignmentData = <?php echo json_encode($assignment_chart_data, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
     const assessmentData = <?php echo json_encode($assessment_chart_data, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
     const tabChartsConfig = <?php echo json_encode($tab_charts_config, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+    const completionRate = <?php echo (int) $completion_rate; ?>;
     const renderedTabCharts = {};
 
-    const tabs = Array.from(document.querySelectorAll('.dashboard-tab[role="tab"]'));
-    const tabPanels = Array.from(document.querySelectorAll('.dashboard-tab-panel[role="tabpanel"]'));
-    const assignmentCanvas = document.getElementById('assignmentStatusChart');
-    const assessmentCanvas = document.getElementById('assessmentActivityChart');
+    // Reusable Callout Labels + Center Text Plugin
+    function createCalloutPlugin(getCenterText) {
+        return {
+            id: 'calloutLabelsPlugin',
+            afterDatasetsDraw: function (chart) {
+                const ctx = chart.ctx;
+                const meta = chart.getDatasetMeta(0);
+                const data = chart.data.datasets[0].data;
+                const labels = chart.data.labels;
+                const colors = chart.data.datasets[0].backgroundColor;
+                if (!meta.data || !meta.data.length) return;
 
-    function renderScalePieChart(scaleId) {
-        if (renderedTabCharts[scaleId] || typeof Chart === 'undefined') return;
-        const cfg = tabChartsConfig[scaleId];
-        const canvas = document.getElementById('pieChart_' + scaleId);
-        if (!cfg || !canvas) return;
+                ctx.save();
 
-        const sum = cfg.values.reduce(function (acc, v) { return acc + Number(v || 0); }, 0);
-        const hasData = sum > 0;
+                const cx = meta.data[0].x;
+                const cy = meta.data[0].y;
+                const center = getCenterText(chart);
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = '#0f172a';
+                ctx.font = '800 24px Inter, system-ui, sans-serif';
+                ctx.fillText(center.main, cx, cy - 8);
+                ctx.fillStyle = '#64748b';
+                ctx.font = '600 10.5px Inter, system-ui, sans-serif';
+                ctx.fillText(center.sub, cx, cy + 12);
 
-        renderedTabCharts[scaleId] = new Chart(canvas, {
+                const rightItems = [];
+                const leftItems = [];
+                meta.data.forEach(function (arc, idx) {
+                    const val = Number(data[idx] || 0);
+                    if (val <= 0) return;
+                    const angle = (arc.startAngle + arc.endAngle) / 2;
+                    const cos = Math.cos(angle);
+                    const sin = Math.sin(angle);
+                    const item = {
+                        label: String(labels[idx] || ''),
+                        val: val,
+                        color: Array.isArray(colors) ? colors[idx] : '#0f766e',
+                        x1: arc.x + cos * (arc.outerRadius + 2),
+                        y1: arc.y + sin * (arc.outerRadius + 2),
+                        x2: arc.x + cos * (arc.outerRadius + 11),
+                        y2: arc.y + sin * (arc.outerRadius + 11),
+                        isRight: cos >= 0
+                    };
+                    if (item.isRight) rightItems.push(item);
+                    else leftItems.push(item);
+                });
+
+                function drawSide(items) {
+                    items.sort(function (a, b) { return a.y2 - b.y2; });
+                    const minGap = 26;
+                    for (let i = 1; i < items.length; i++) {
+                        if (items[i].y2 - items[i - 1].y2 < minGap) {
+                            items[i].y2 = items[i - 1].y2 + minGap;
+                        }
+                    }
+
+                    ctx.textBaseline = 'middle';
+                    items.forEach(function (item) {
+                        const x3 = item.x2 + (item.isRight ? 8 : -8);
+                        ctx.beginPath();
+                        ctx.moveTo(item.x1, item.y1);
+                        ctx.lineTo(item.x2, item.y2);
+                        ctx.lineTo(x3, item.y2);
+                        ctx.strokeStyle = item.color;
+                        ctx.lineWidth = 1.4;
+                        ctx.stroke();
+
+                        const tx = x3 + (item.isRight ? 4 : -4);
+                        ctx.textAlign = item.isRight ? 'left' : 'right';
+                        ctx.fillStyle = '#0f172a';
+                        ctx.font = '700 10.5px Inter, system-ui, sans-serif';
+                        ctx.fillText(item.label, tx, item.y2 - 5);
+
+                        ctx.fillStyle = '#64748b';
+                        ctx.font = '600 10px Inter, system-ui, sans-serif';
+                        ctx.fillText('(' + item.val + ')', tx, item.y2 + 6);
+                    });
+                }
+
+                drawSide(rightItems);
+                drawSide(leftItems);
+                ctx.restore();
+            }
+        };
+    }
+
+    // 1. Overview Completion Ring Chart
+    const ringCanvas = document.getElementById('ccCompletionRing');
+    if (ringCanvas) {
+        const hasAssign = (assignmentData[0] + assignmentData[1]) > 0;
+        new Chart(ringCanvas, {
             type: 'doughnut',
             data: {
-                labels: hasData ? cfg.labels : ['No records yet'],
+                labels: hasAssign ? ['Completed', 'Pending'] : ['No Data'],
                 datasets: [{
-                    data: hasData ? cfg.values : [1],
-                    backgroundColor: hasData ? cfg.colors : ['#e2e8f0'],
+                    data: hasAssign ? assignmentData : [1],
+                    backgroundColor: hasAssign ? ['#0f766e', '#f59e0b'] : ['#e2e8f0'],
                     borderColor: '#ffffff',
                     borderWidth: 2,
-                    hoverOffset: hasData ? 6 : 0
+                    hoverOffset: hasAssign ? 5 : 0
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                cutout: '62%',
+                cutout: '66%',
+                layout: { padding: { top: 18, bottom: 18, left: 82, right: 82 } },
                 plugins: {
                     legend: { display: false },
-                    tooltip: {
-                        enabled: hasData,
-                        callbacks: {
-                            label: function (context) {
-                                return ' ' + context.label + ': ' + context.raw + ' ' + cfg.unit;
-                            }
-                        }
-                    }
-                }
-            }
-        });
-    }
-
-    function activateTab(tab, moveFocus) {
-        const panelId = tab.getAttribute('aria-controls');
-        tabs.forEach(function (item) {
-            const active = item === tab;
-            item.setAttribute('aria-selected', active ? 'true' : 'false');
-            item.tabIndex = active ? 0 : -1;
-        });
-        tabPanels.forEach(function (panel) {
-            panel.hidden = panel.id !== panelId;
-        });
-
-        const scaleId = panelId.replace('panel-', '');
-        if (tabChartsConfig[scaleId]) {
-            renderScalePieChart(scaleId);
-        }
-
-        if (moveFocus) tab.focus();
-        window.dispatchEvent(new Event('resize'));
-    }
-
-    tabs.forEach(function (tab, index) {
-        tab.addEventListener('click', function () {
-            activateTab(tab, false);
-        });
-        tab.addEventListener('keydown', function (event) {
-            let nextIndex = index;
-            if (event.key === 'ArrowRight') nextIndex = (index + 1) % tabs.length;
-            else if (event.key === 'ArrowLeft') nextIndex = (index - 1 + tabs.length) % tabs.length;
-            else if (event.key === 'Home') nextIndex = 0;
-            else if (event.key === 'End') nextIndex = tabs.length - 1;
-            else return;
-            event.preventDefault();
-            activateTab(tabs[nextIndex], true);
-        });
-    });
-
-    const centerLabel = {
-        id: 'assignmentCenterLabel',
-        afterDraw: function (chart) {
-            const area = chart.chartArea;
-            if (!area) return;
-            const context = chart.ctx;
-            const x = (area.left + area.right) / 2;
-            const y = (area.top + area.bottom) / 2;
-            context.save();
-            context.textAlign = 'center';
-            context.textBaseline = 'middle';
-            context.fillStyle = '#101828';
-            context.font = '800 27px system-ui, sans-serif';
-            context.fillText('<?php echo $completion_rate; ?>%', x, y - 7);
-            context.fillStyle = '#98a2b3';
-            context.font = '600 11px system-ui, sans-serif';
-            context.fillText('complete', x, y + 16);
-            context.restore();
-        }
-    };
-
-    if (assignmentCanvas && typeof Chart !== 'undefined') {
-        new Chart(assignmentCanvas, {
-            type: 'doughnut',
-            data: {
-                labels: ['Completed', 'Awaiting response'],
-                datasets: [{
-                    data: assignmentData[0] + assignmentData[1] > 0 ? assignmentData : [1, 0],
-                    backgroundColor: assignmentData[0] + assignmentData[1] > 0 ? ['#0f766e', '#f2b84b'] : ['#e7ebf2', '#e7ebf2'],
-                    borderWidth: 0,
-                    hoverOffset: 6
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                cutout: '75%',
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        callbacks: {
-                            label: function (context) {
-                                const actualValue = assignmentData[context.dataIndex] || 0;
-                                return ' ' + context.label + ': ' + actualValue;
-                            }
-                        }
-                    }
+                    tooltip: { enabled: hasAssign }
                 }
             },
-            plugins: [centerLabel]
+            plugins: [createCalloutPlugin(function () {
+                return { main: completionRate + '%', sub: 'Completed' };
+            })]
         });
     }
 
-    if (assessmentCanvas && typeof Chart !== 'undefined') {
-        new Chart(assessmentCanvas, {
+    // 2. Overview Volume Bar Chart
+    const barCanvas = document.getElementById('ccVolumeBarChart');
+    if (barCanvas) {
+        new Chart(barCanvas, {
             type: 'bar',
             data: {
                 labels: assessmentData.labels,
                 datasets: [
                     {
-                        label: 'Total records',
+                        label: 'Total Records',
                         data: assessmentData.total,
-                        backgroundColor: '#4f46e5',
+                        backgroundColor: '#0f766e',
                         borderRadius: 6,
-                        maxBarThickness: 38
+                        maxBarThickness: 28
                     },
                     {
-                        label: 'Last 7 days',
+                        label: 'Last 7 Days',
                         data: assessmentData.recent,
-                        backgroundColor: '#06b6d4',
+                        backgroundColor: '#38bdf8',
                         borderRadius: 6,
-                        maxBarThickness: 38
+                        maxBarThickness: 28
                     }
                 ]
             },
@@ -987,31 +2010,150 @@ document.addEventListener('DOMContentLoaded', function () {
                 maintainAspectRatio: false,
                 interaction: { intersect: false, mode: 'index' },
                 plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        callbacks: {
-                            label: function (context) {
-                                return ' ' + context.dataset.label + ': ' + (context.raw === null ? 'unavailable' : context.raw);
-                            }
-                        }
+                    legend: {
+                        position: 'top',
+                        align: 'end',
+                        labels: { usePointStyle: true, boxWidth: 8, font: { size: 11, weight: '600' }, color: '#475569' }
                     }
                 },
                 scales: {
                     x: {
                         grid: { display: false },
-                        ticks: { color: '#667085', font: { weight: 700 } },
+                        ticks: { color: '#334155', font: { size: 11.5, weight: '700' } },
                         border: { display: false }
                     },
                     y: {
                         beginAtZero: true,
-                        ticks: { precision: 0, color: '#98a2b3' },
-                        grid: { color: '#eef0f4' },
+                        ticks: { precision: 0, color: '#94a3b8', font: { size: 11 } },
+                        grid: { color: '#f1f5f9' },
                         border: { display: false }
                     }
                 }
             }
         });
     }
+
+    // 3. Overview Interactive Scale Breakdown Doughnut
+    const pieCanvas = document.getElementById('ccScalePieChart');
+    const pieTitleEl = document.getElementById('ccScalePieTitle');
+    const pieSubEl = document.getElementById('ccScalePieSub');
+    let scalePieInstance = null;
+
+    function buildScaleDoughnut(canvas, scaleKey) {
+        const cfg = tabChartsConfig[scaleKey];
+        if (!canvas || !cfg) return null;
+        const sum = cfg.values.reduce(function (acc, v) { return acc + Number(v || 0); }, 0);
+        const hasData = sum > 0;
+
+        return new Chart(canvas, {
+            type: 'doughnut',
+            data: {
+                labels: hasData ? cfg.labels : ['No records yet'],
+                datasets: [{
+                    data: hasData ? cfg.values : [1],
+                    backgroundColor: hasData ? cfg.colors : ['#e2e8f0'],
+                    borderColor: '#ffffff',
+                    borderWidth: 2,
+                    hoverOffset: hasData ? 5 : 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '62%',
+                layout: { padding: { top: 24, bottom: 24, left: 118, right: 118 } },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        enabled: hasData,
+                        callbacks: {
+                            label: function (ctx) {
+                                return ' ' + ctx.label + ': ' + ctx.raw + ' ' + cfg.unit;
+                            }
+                        }
+                    }
+                }
+            },
+            plugins: [createCalloutPlugin(function () {
+                return {
+                    main: hasData ? String(Math.round(sum * 10) / 10) : '0',
+                    sub: cfg.unit
+                };
+            })]
+        });
+    }
+
+    function renderOverviewScaleBreakdown(scaleKey) {
+        const cfg = tabChartsConfig[scaleKey];
+        if (!cfg) return;
+        if (pieTitleEl) pieTitleEl.textContent = cfg.title;
+        if (pieSubEl) pieSubEl.textContent = cfg.subtitle;
+        if (scalePieInstance) scalePieInstance.destroy();
+        scalePieInstance = buildScaleDoughnut(pieCanvas, scaleKey);
+    }
+
+    document.querySelectorAll('.cc-switch-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            document.querySelectorAll('.cc-switch-btn').forEach(function (b) { b.classList.remove('is-active'); });
+            btn.classList.add('is-active');
+            renderOverviewScaleBreakdown(btn.getAttribute('data-scale'));
+        });
+    });
+
+    renderOverviewScaleBreakdown('bprs');
+
+    // 4. Main Tab Switching (Overview + Individual Scale Tabs)
+    const navTabs = Array.from(document.querySelectorAll('.cc-nav-tab[role="tab"]'));
+    const tabPanels = Array.from(document.querySelectorAll('.cc-tab-panel[role="tabpanel"]'));
+
+    function activateTab(tab, moveFocus) {
+        const panelId = tab.getAttribute('aria-controls');
+        navTabs.forEach(function (t) {
+            const active = t === tab;
+            t.setAttribute('aria-selected', active ? 'true' : 'false');
+            t.tabIndex = active ? 0 : -1;
+        });
+        tabPanels.forEach(function (panel) {
+            panel.hidden = panel.id !== panelId;
+        });
+
+        const scaleId = panelId.replace('panel-', '');
+        if (tabChartsConfig[scaleId] && !renderedTabCharts[scaleId]) {
+            const tabCanvas = document.getElementById('tabPieChart_' + scaleId);
+            renderedTabCharts[scaleId] = buildScaleDoughnut(tabCanvas, scaleId);
+        }
+
+        if (moveFocus) tab.focus();
+        window.dispatchEvent(new Event('resize'));
+    }
+
+    navTabs.forEach(function (tab, idx) {
+        tab.addEventListener('click', function () {
+            activateTab(tab, false);
+        });
+        tab.addEventListener('keydown', function (e) {
+            let next = idx;
+            if (e.key === 'ArrowRight') next = (idx + 1) % navTabs.length;
+            else if (e.key === 'ArrowLeft') next = (idx - 1 + navTabs.length) % navTabs.length;
+            else if (e.key === 'Home') next = 0;
+            else if (e.key === 'End') next = navTabs.length - 1;
+            else return;
+            e.preventDefault();
+            activateTab(navTabs[next], true);
+        });
+    });
+
+    // Matrix "Details" buttons jump directly to that scale's tab
+    document.querySelectorAll('.cc-open-tab-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            const targetId = btn.getAttribute('data-target-tab');
+            const targetTab = document.getElementById(targetId);
+            if (targetTab) {
+                activateTab(targetTab, false);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        });
+    });
 });
 </script>
 

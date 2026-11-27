@@ -96,11 +96,20 @@ if ($record) {
     $decoded_demo = json_decode((string) ($record['demographic_data'] ?? ''), true);
     $normalized_demo = assessment_demographics_normalize(is_array($decoded_demo) ? $decoded_demo : []);
     foreach ($normalized_demo as $key => $val) {
-        if (in_array($key, ['date', 'client_name'], true)) {
+        if ($key === 'client_name') {
             continue;
         }
         $val_str = is_array($val) ? implode(', ', array_filter($val)) : trim((string) $val);
-        $label = ucwords(str_replace('_', ' ', (string) $key));
+
+        if ($key === 'date') {
+            $label = 'Date';
+            if ($val_str !== '' && strtotime($val_str) !== false) {
+                $val_str = date('d M Y', strtotime($val_str));
+            }
+        } else {
+            $label = ucwords(str_replace('_', ' ', (string) $key));
+        }
+
         $demographics_list[$label] = $val_str !== '' ? $val_str : '—';
     }
 
@@ -155,7 +164,7 @@ require 'layout/base.php';
     }
 
     .panss-report {
-        max-width: 1200px;
+        max-width: 1180px;
         margin: 0 auto;
         padding: 24px 18px 52px;
         color: var(--pr-text);
@@ -210,11 +219,11 @@ require 'layout/base.php';
         transform: translateY(-1px);
     }
 
-    /* Executive Hero Banner */
+    /* Executive Hero Banner (with Integrated Demographics) */
     .report-hero {
         position: relative;
         overflow: hidden;
-        padding: 28px 30px;
+        padding: 26px 28px;
         border-radius: 16px;
         background: linear-gradient(135deg, #0f3f3c 0%, #0f766e 55%, #0891b2 100%);
         color: #fff;
@@ -253,18 +262,18 @@ require 'layout/base.php';
         font-weight: 800;
         letter-spacing: 0.08em;
         text-transform: uppercase;
-        margin-bottom: 10px;
+        margin-bottom: 8px;
     }
 
     .report-hero h1 {
         margin: 0;
-        font-size: clamp(24px, 3.5vw, 32px);
+        font-size: clamp(24px, 3.5vw, 31px);
         font-weight: 800;
         letter-spacing: -0.02em;
     }
 
     .report-subtitle {
-        margin: 6px 0 0;
+        margin: 5px 0 0;
         color: #ccfbf1;
         font-size: 13.5px;
     }
@@ -279,7 +288,7 @@ require 'layout/base.php';
     .hero-total-pill {
         display: inline-flex;
         align-items: center;
-        gap: 6px;
+        gap: 7px;
         padding: 7px 15px;
         border-radius: 999px;
         background: rgba(255, 255, 255, 0.18);
@@ -287,13 +296,14 @@ require 'layout/base.php';
         color: #fff;
         font-size: 13px;
         font-weight: 800;
+        white-space: nowrap;
     }
 
     .report-meta {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 12px;
-        margin-top: 22px;
+        margin-top: 20px;
         position: relative;
         z-index: 1;
     }
@@ -302,7 +312,7 @@ require 'layout/base.php';
         background: rgba(255, 255, 255, 0.12);
         border: 1px solid rgba(255, 255, 255, 0.18);
         border-radius: 10px;
-        padding: 11px 14px;
+        padding: 10px 14px;
     }
 
     .meta-box span {
@@ -316,45 +326,59 @@ require 'layout/base.php';
 
     .meta-box strong {
         display: block;
-        margin-top: 4px;
-        font-size: 14.5px;
+        margin-top: 3px;
+        font-size: 14px;
         font-weight: 700;
         color: #fff;
     }
 
-    /* Demographic Details Card */
-    .demo-card {
-        margin-top: 20px;
+    /* Integrated Demographics Inside Hero */
+    .hero-demo-wrap {
+        margin-top: 14px;
+        padding-top: 14px;
+        border-top: 1px solid rgba(255, 255, 255, 0.16);
+        position: relative;
+        z-index: 1;
     }
 
-    .demo-grid {
+    .hero-demo-title {
+        font-size: 10px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.09em;
+        color: #99f6e4;
+        margin-bottom: 10px;
+    }
+
+    .hero-demo-grid {
         display: grid;
         grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 12px 16px;
+        gap: 9px 12px;
     }
 
-    .demo-item {
-        background: #f8fafc;
-        border: 1px solid var(--pr-border-soft);
-        border-radius: 9px;
-        padding: 10px 13px;
+    .hero-demo-item {
+        background: rgba(255, 255, 255, 0.09);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 8px;
+        padding: 7px 11px;
     }
 
-    .demo-item span {
+    .hero-demo-item span {
         display: block;
-        font-size: 10.5px;
+        font-size: 9.5px;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.05em;
-        color: var(--pr-muted);
+        color: #ccfbf1;
+        opacity: 0.9;
     }
 
-    .demo-item strong {
+    .hero-demo-item strong {
         display: block;
-        margin-top: 3px;
-        font-size: 13.5px;
+        margin-top: 2px;
+        font-size: 12.5px;
         font-weight: 700;
-        color: var(--pr-text);
+        color: #fff;
         overflow-wrap: anywhere;
     }
 
@@ -363,21 +387,21 @@ require 'layout/base.php';
         display: grid;
         grid-template-columns: repeat(4, minmax(0, 1fr));
         gap: 14px;
-        margin-top: 20px;
+        margin-top: 18px;
     }
 
     .panss-kpi {
         background: #fff;
         border: 1px solid var(--pr-border);
         border-radius: 12px;
-        padding: 16px 18px;
+        padding: 15px 17px;
         box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
         border-top: 3px solid var(--kpi-accent, var(--pr-primary));
     }
 
     .panss-kpi-label {
         display: block;
-        font-size: 11px;
+        font-size: 10.5px;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.05em;
@@ -392,7 +416,7 @@ require 'layout/base.php';
     }
 
     .panss-kpi-val strong {
-        font-size: 26px;
+        font-size: 25px;
         font-weight: 800;
         line-height: 1;
         color: var(--pr-text);
@@ -406,8 +430,8 @@ require 'layout/base.php';
 
     .panss-kpi-sub {
         display: block;
-        margin-top: 5px;
-        font-size: 11.5px;
+        margin-top: 4px;
+        font-size: 11px;
         color: var(--pr-muted);
     }
 
@@ -424,7 +448,7 @@ require 'layout/base.php';
         background: linear-gradient(to right, #f8fafc, #f1f5f9);
         border-bottom: 1px solid var(--pr-border);
         border-left: 4px solid var(--pr-primary);
-        padding: 13px 20px;
+        padding: 12px 18px;
         display: flex;
         justify-content: space-between;
         align-items: center;
@@ -433,7 +457,7 @@ require 'layout/base.php';
 
     .card-head h2 {
         margin: 0;
-        font-size: 13.5px;
+        font-size: 13px;
         font-weight: 800;
         text-transform: uppercase;
         letter-spacing: 0.04em;
@@ -452,22 +476,22 @@ require 'layout/base.php';
     }
 
     .card-body-pad {
-        padding: 20px 22px;
+        padding: 18px 20px;
     }
 
-    /* Overview Grid (Chart + Domain Bars) */
-    .overview-grid {
+    /* Overview Grid */
+    .overview-stack {
         display: grid;
-        grid-template-columns: 440px minmax(0, 1fr);
-        gap: 20px;
-        margin-top: 20px;
+        grid-template-columns: 480px minmax(0, 1fr);
+        gap: 18px;
+        margin-top: 18px;
         align-items: stretch;
     }
 
     .score-chart-wrap {
         position: relative;
         width: 100%;
-        height: 235px;
+        height: 245px;
         margin: 0 auto;
     }
 
@@ -475,9 +499,9 @@ require 'layout/base.php';
         display: flex;
         flex-wrap: wrap;
         justify-content: center;
-        gap: 8px 16px;
-        margin-top: 8px;
-        font-size: 11.5px;
+        gap: 8px 20px;
+        margin-top: 10px;
+        font-size: 12px;
         font-weight: 600;
         color: #475569;
     }
@@ -498,7 +522,8 @@ require 'layout/base.php';
     /* Domain Distribution Bars */
     .domain-bars {
         display: grid;
-        gap: 16px;
+        grid-template-columns: 1fr;
+        gap: 14px;
     }
 
     .domain-bar-top {
@@ -506,13 +531,14 @@ require 'layout/base.php';
         justify-content: space-between;
         align-items: center;
         margin-bottom: 6px;
-        font-size: 13px;
+        font-size: 12.5px;
+        gap: 8px;
     }
 
     .domain-bar-name {
         display: inline-flex;
         align-items: center;
-        gap: 8px;
+        gap: 7px;
         font-weight: 700;
         color: #334155;
     }
@@ -525,7 +551,7 @@ require 'layout/base.php';
     }
 
     .domain-track {
-        height: 9px;
+        height: 8px;
         border-radius: 999px;
         background: #edf2f7;
         overflow: hidden;
@@ -537,10 +563,10 @@ require 'layout/base.php';
         border-radius: 999px;
     }
 
-    /* Composite Highlight Box */
+    /* Composite & Combined Score Highlight Boxes */
     .composite-box {
-        margin-top: 20px;
-        padding: 15px 18px;
+        margin-top: 16px;
+        padding: 13px 16px;
         border-radius: 12px;
         background: #f8fafc;
         border: 1px solid var(--pr-border);
@@ -550,6 +576,10 @@ require 'layout/base.php';
         gap: 14px;
     }
 
+    .combined-score-box {
+        margin-top: 10px;
+    }
+
     .composite-left {
         display: flex;
         align-items: center;
@@ -557,35 +587,35 @@ require 'layout/base.php';
     }
 
     .composite-icon {
-        width: 40px;
-        height: 40px;
+        width: 38px;
+        height: 38px;
         border-radius: 10px;
         background: var(--pr-primary-soft);
         color: var(--pr-primary);
         display: grid;
         place-items: center;
-        font-size: 18px;
+        font-size: 17px;
         flex-shrink: 0;
     }
 
     .composite-title {
-        font-size: 14px;
+        font-size: 13.5px;
         font-weight: 800;
         color: var(--pr-text);
     }
 
     .composite-formula {
-        font-size: 12px;
+        font-size: 11.5px;
         color: var(--pr-muted);
     }
 
     .composite-val {
-        min-width: 76px;
-        padding: 7px 14px;
+        min-width: 72px;
+        padding: 6px 12px;
         border-radius: 10px;
         background: #fff;
         border: 1px solid #cbd5e1;
-        font-size: 24px;
+        font-size: 22px;
         font-weight: 900;
         text-align: center;
         color: var(--pr-text);
@@ -603,7 +633,20 @@ require 'layout/base.php';
         color: #b91c1c;
     }
 
-    /* Item Breakdown Section */
+    .composite-val.is-combined {
+        background: var(--pr-primary-soft);
+        border-color: #99f6e4;
+        color: var(--pr-primary-dark);
+        white-space: nowrap;
+    }
+
+    .composite-val.is-combined span {
+        font-size: 13px;
+        font-weight: 700;
+        color: #0f766e;
+    }
+
+    /* Item Breakdown Section (Starts on Page 2 when printed) */
     .section-divider {
         margin: 28px 0 14px;
         display: flex;
@@ -628,27 +671,27 @@ require 'layout/base.php';
     .pn-grid {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 20px;
-        margin-bottom: 20px;
+        gap: 18px;
+        margin-bottom: 18px;
     }
 
     .item-list {
         display: grid;
-        gap: 11px;
+        gap: 10px;
     }
 
     .item-list-2col {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 12px 24px;
+        gap: 10px 24px;
     }
 
     .item-row {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) 90px auto;
+        grid-template-columns: minmax(0, 1fr) 85px auto;
         align-items: center;
-        gap: 12px;
-        padding-bottom: 10px;
+        gap: 10px;
+        padding-bottom: 9px;
         border-bottom: 1px solid var(--pr-border-soft);
     }
 
@@ -669,7 +712,7 @@ require 'layout/base.php';
         align-items: center;
         justify-content: center;
         min-width: 30px;
-        height: 24px;
+        height: 23px;
         padding: 0 6px;
         border-radius: 6px;
         background: #f1f5f9;
@@ -680,12 +723,10 @@ require 'layout/base.php';
     }
 
     .item-label {
-        font-size: 13px;
+        font-size: 12.5px;
         font-weight: 600;
         color: #1e293b;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        line-height: 1.3;
     }
 
     .item-track {
@@ -707,14 +748,14 @@ require 'layout/base.php';
         flex-direction: column;
         align-items: flex-end;
         gap: 2px;
-        min-width: 82px;
+        min-width: 78px;
     }
 
     .rating-pill {
         display: inline-flex;
-        padding: 2px 9px;
+        padding: 2px 8px;
         border-radius: 999px;
-        font-size: 11.5px;
+        font-size: 11px;
         font-weight: 800;
         white-space: nowrap;
     }
@@ -725,7 +766,7 @@ require 'layout/base.php';
     .rating-pill.is-empty { background: #f1f5f9; color: #64748b; }
 
     .rating-text {
-        font-size: 10.5px;
+        font-size: 10px;
         font-weight: 600;
         color: var(--pr-muted);
         white-space: nowrap;
@@ -733,7 +774,7 @@ require 'layout/base.php';
 
     /* Clinical Notes */
     .notes-card {
-        margin-top: 20px;
+        margin-top: 18px;
     }
 
     .clinical-notes {
@@ -756,8 +797,8 @@ require 'layout/base.php';
         justify-content: space-between;
         align-items: flex-end;
         gap: 40px;
-        margin-top: 48px;
-        padding: 28px 8px 8px;
+        margin-top: 32px;
+        padding: 20px 8px 8px;
         border-top: 1px solid #e2e8f0;
         break-inside: avoid;
         page-break-inside: avoid;
@@ -770,7 +811,7 @@ require 'layout/base.php';
 
     .report-sign-line {
         border-top: 1px solid #334155;
-        margin-top: 52px;
+        margin-top: 44px;
         padding-top: 8px;
     }
 
@@ -799,8 +840,8 @@ require 'layout/base.php';
 
     @media (max-width: 1024px) {
         .panss-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-        .demo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-        .overview-grid,
+        .hero-demo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .overview-stack,
         .pn-grid,
         .item-list-2col { grid-template-columns: 1fr; }
     }
@@ -824,14 +865,23 @@ require 'layout/base.php';
 
     @media (max-width: 480px) {
         .panss-kpi-grid,
-        .demo-grid { grid-template-columns: 1fr; }
+        .hero-demo-grid { grid-template-columns: 1fr; }
+    }
+
+    /* PRINT LAYOUT: Removes browser URL/date headers via @page margin: 0 */
+    @page {
+        size: A4 portrait;
+        margin: 0;
     }
 
     @media print {
+        html,
         body {
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
             background: #fff !important;
+            margin: 0 !important;
+            padding: 0 !important;
         }
         .report-topbar,
         .admin-sidebar,
@@ -840,26 +890,207 @@ require 'layout/base.php';
             display: none !important;
         }
         .panss-report {
-            max-width: none;
-            padding: 0;
+            max-width: 100% !important;
+            padding: 9mm 10mm !important;
+            margin: 0 !important;
         }
-        .report-hero,
-        .panss-kpi,
-        .item-row,
-        .composite-box {
+
+        /* Balanced Full-Page 1 Fit */
+        .report-hero {
+            padding: 15px 18px !important;
+            border-radius: 12px !important;
             box-shadow: none !important;
             break-inside: avoid;
             page-break-inside: avoid;
+        }
+        .report-eyebrow {
+            margin-bottom: 5px !important;
+            font-size: 9px !important;
+            padding: 2px 9px !important;
+        }
+        .report-hero h1 {
+            font-size: 20px !important;
+        }
+        .report-subtitle {
+            font-size: 11px !important;
+        }
+        .report-meta {
+            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+            gap: 8px !important;
+            margin-top: 11px !important;
+        }
+        .meta-box {
+            padding: 6px 10px !important;
+        }
+        .meta-box span {
+            font-size: 8.5px !important;
+        }
+        .meta-box strong {
+            font-size: 12px !important;
+        }
+        .hero-demo-wrap {
+            margin-top: 10px !important;
+            padding-top: 9px !important;
+        }
+        .hero-demo-title {
+            margin-bottom: 6px !important;
+        }
+        .hero-demo-grid {
+            grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+            gap: 6px 8px !important;
+        }
+        .hero-demo-item {
+            padding: 5px 9px !important;
+        }
+        .hero-demo-item span {
+            font-size: 8px !important;
+        }
+        .hero-demo-item strong {
+            font-size: 10.5px !important;
+        }
+
+        /* 4 KPI cards in 1 single row */
+        .panss-kpi-grid {
+            grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+            gap: 10px !important;
+            margin-top: 12px !important;
+        }
+        .panss-kpi {
+            padding: 10px 12px !important;
+            box-shadow: none !important;
+            break-inside: avoid;
+            page-break-inside: avoid;
+        }
+        .panss-kpi-label {
+            font-size: 9px !important;
+        }
+        .panss-kpi-val strong {
+            font-size: 19px !important;
+        }
+        .panss-kpi-sub {
+            font-size: 9.5px !important;
+            margin-top: 4px !important;
+        }
+
+        /* 100% Width Stacked Overview Cards on Page 1 */
+        .overview-stack {
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 12px !important;
+            margin-top: 12px !important;
+        }
+        .score-chart-wrap {
+            width: 560px !important;
+            max-width: 100% !important;
+            height: 225px !important;
+            margin: 0 auto !important;
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+        }
+        .score-chart-wrap canvas {
+            margin: 0 auto !important;
+            display: block !important;
+        }
+        .chart-legend-custom {
+            margin-top: 10px !important;
+            font-size: 11px !important;
+        }
+
+        /* 2 Scales in Row 1 + 3rd Scale Full Width Below */
+        .domain-bars {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 10px 18px !important;
+        }
+        .domain-bars > div:last-child {
+            grid-column: 1 / -1 !important;
+        }
+        .domain-bar-top {
+            font-size: 11px !important;
+            margin-bottom: 5px !important;
+        }
+        .card-head {
+            padding: 8px 14px !important;
+            break-after: avoid;
+            page-break-after: avoid;
+        }
+        .card-head h2 {
+            font-size: 11.5px !important;
+        }
+        .card-body-pad {
+            padding: 12px 16px !important;
+        }
+        .composite-box {
+            margin-top: 11px !important;
+            padding: 9px 14px !important;
+        }
+        .combined-score-box {
+            margin-top: 8px !important;
+        }
+        .composite-val {
+            font-size: 18px !important;
+            padding: 5px 11px !important;
+        }
+        .composite-val.is-combined span {
+            font-size: 11.5px !important;
+        }
+
+        /* Start Item-Level Ratings cleanly on Page 2 with top margin */
+        .print-page-break {
+            break-before: page !important;
+            page-break-before: always !important;
+            margin-top: 0 !important;
+            padding-top: 9mm !important;
+            margin-bottom: 10px !important;
+        }
+
+        .pn-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 10px !important;
+            margin-bottom: 10px !important;
+        }
+        .item-list {
+            gap: 5px !important;
+        }
+        .item-list-2col {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 5px 16px !important;
+        }
+        .item-row {
+            grid-template-columns: minmax(0, 1fr) 55px auto !important;
+            gap: 8px !important;
+            padding-bottom: 5px !important;
+            break-inside: avoid;
+            page-break-inside: avoid;
+        }
+        .item-code {
+            min-width: 24px !important;
+            height: 19px !important;
+            font-size: 9.5px !important;
+        }
+        .item-label {
+            font-size: 10.5px !important;
+            white-space: normal !important;
+        }
+        .rating-pill {
+            font-size: 9.5px !important;
+            padding: 1px 6px !important;
+        }
+        .rating-text {
+            font-size: 9px !important;
+        }
+        .report-sign-footer {
+            margin-top: 18px !important;
+            padding-top: 14px !important;
+        }
+        .report-sign-line {
+            margin-top: 34px !important;
         }
         .report-card {
             box-shadow: none !important;
             overflow: visible !important;
             break-inside: auto !important;
             page-break-inside: auto !important;
-        }
-        .card-head {
-            break-after: avoid;
-            page-break-after: avoid;
         }
     }
 </style>
@@ -882,7 +1113,7 @@ require 'layout/base.php';
             <p class="mb-0"><?php echo panss_score_escape($load_error); ?></p>
         </section>
     <?php else: ?>
-        <!-- HERO HEADER -->
+        <!-- HERO HEADER WITH INTEGRATED DEMOGRAPHIC DETAILS -->
         <header class="report-hero">
             <div class="hero-top">
                 <div>
@@ -891,7 +1122,10 @@ require 'layout/base.php';
                     <p class="report-subtitle">Positive and Negative Syndrome Scale &middot; 30-Item Clinician-Rated Assessment</p>
                 </div>
                 <div class="hero-right">
-                    <span class="hero-total-pill">Combined Score: <?php echo (int) $combined_total; ?> / 210</span>
+                    <span class="hero-total-pill">
+                        <i class="bi bi-calendar3" aria-hidden="true"></i>
+                        Date: <?php echo panss_score_escape(date('d M Y', strtotime($record['assessment_date']))); ?>
+                    </span>
                 </div>
             </div>
 
@@ -909,26 +1143,21 @@ require 'layout/base.php';
                     <strong><?php echo panss_score_escape($clinician_name); ?></strong>
                 </div>
             </div>
-        </header>
 
-        <!-- PATIENT DEMOGRAPHIC DETAILS -->
-        <?php if (!empty($demographics_list)): ?>
-            <section class="report-card demo-card" aria-labelledby="panssDemoTitle">
-                <div class="card-head">
-                    <h2 id="panssDemoTitle">Patient Demographic Details</h2>
-                </div>
-                <div class="card-body-pad">
-                    <div class="demo-grid">
+            <?php if (!empty($demographics_list)): ?>
+                <div class="hero-demo-wrap">
+                    <div class="hero-demo-title">Patient Demographic Details</div>
+                    <div class="hero-demo-grid">
                         <?php foreach ($demographics_list as $demo_label => $demo_value): ?>
-                            <div class="demo-item">
+                            <div class="hero-demo-item">
                                 <span><?php echo panss_score_escape($demo_label); ?></span>
                                 <strong><?php echo panss_score_escape($demo_value); ?></strong>
                             </div>
                         <?php endforeach; ?>
                     </div>
                 </div>
-            </section>
-        <?php endif; ?>
+            <?php endif; ?>
+        </header>
 
         <!-- 4-COLUMN SUBSCALE KPI STRIP -->
         <div class="panss-kpi-grid">
@@ -965,8 +1194,8 @@ require 'layout/base.php';
             </div>
         </div>
 
-        <!-- OVERVIEW: CHART + DOMAIN BREAKDOWN -->
-        <div class="overview-grid">
+        <!-- OVERVIEW: GRAPH & SUBSCALE PERFORMANCE -->
+        <div class="overview-stack">
             <section class="report-card" aria-labelledby="panssSummaryTitle">
                 <div class="card-head">
                     <h2 id="panssSummaryTitle">Score Distribution</h2>
@@ -1022,12 +1251,25 @@ require 'layout/base.php';
                             <?php echo $composite_score > 0 ? '+' : ''; ?><?php echo $composite_score; ?>
                         </div>
                     </div>
+
+                    <div class="composite-box combined-score-box" role="group" aria-label="Combined score <?php echo (int) $combined_total; ?> out of 210">
+                        <div class="composite-left">
+                            <span class="composite-icon" aria-hidden="true"><i class="bi bi-clipboard2-pulse"></i></span>
+                            <div>
+                                <div class="composite-title">Combined Score</div>
+                                <div class="composite-formula">Positive (<?php echo (int) $record['positive_score']; ?>) + Negative (<?php echo (int) $record['negative_score']; ?>) + General (<?php echo (int) $record['general_score']; ?>)</div>
+                            </div>
+                        </div>
+                        <div class="composite-val is-combined">
+                            <?php echo (int) $combined_total; ?><span> / 210</span>
+                        </div>
+                    </div>
                 </div>
             </section>
         </div>
 
-        <!-- DETAILED ITEM SCORES -->
-        <div class="section-divider">
+        <!-- DETAILED ITEM SCORES (STARTS ON PAGE 2 IN PRINT) -->
+        <div class="section-divider print-page-break">
             <h2>Item-Level Symptom Ratings</h2>
             <span>Rated from 1 (Absent) to 7 (Extreme)</span>
         </div>
@@ -1145,19 +1387,19 @@ require 'layout/base.php';
 
                 ctx.save();
 
-                // Exact center me Total Score
+                // Center Total Score
                 var centerX = meta.data[0].x;
                 var centerY = meta.data[0].y;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillStyle = '#0f172a';
-                ctx.font = '900 28px system-ui, -apple-system, sans-serif';
+                ctx.font = '900 24px system-ui, -apple-system, sans-serif';
                 ctx.fillText(String(combinedTotal), centerX, centerY - 8);
                 ctx.fillStyle = '#64748b';
-                ctx.font = '700 12px system-ui, -apple-system, sans-serif';
-                ctx.fillText('/ 210', centerX, centerY + 14);
+                ctx.font = '700 11px system-ui, -apple-system, sans-serif';
+                ctx.fillText('/ 210', centerX, centerY + 12);
 
-                // Har slice ke bagal me full name + score (cleanly wrapped)
+                // Callout Labels
                 ctx.font = '700 10.5px system-ui, -apple-system, sans-serif';
                 ctx.textBaseline = 'middle';
 
@@ -1174,7 +1416,7 @@ require 'layout/base.php';
                     var x2 = arc.x + cos * (arc.outerRadius + 10);
                     var y2 = arc.y + sin * (arc.outerRadius + 10);
                     var isRight = cos >= 0;
-                    var x3 = x2 + (isRight ? 8 : -8);
+                    var x3 = x2 + (isRight ? 10 : -10);
 
                     ctx.beginPath();
                     ctx.moveTo(x1, y1);
@@ -1192,13 +1434,12 @@ require 'layout/base.php';
                         lines.push(words[1]);
                         lines.push(words.slice(2).join(' ') + ' (' + value + ')');
                     } else {
-                        lines.push(fullLabel);
-                        lines.push('(' + value + ')');
+                        lines.push(fullLabel + ' (' + value + ')');
                     }
 
                     ctx.fillStyle = '#0f172a';
                     ctx.textAlign = isRight ? 'left' : 'right';
-                    var textX = x3 + (isRight ? 4 : -4);
+                    var textX = x3 + (isRight ? 5 : -5);
                     var lineHeight = 13;
                     var startY = y2 - ((lines.length - 1) * lineHeight) / 2;
 
@@ -1211,7 +1452,7 @@ require 'layout/base.php';
             }
         };
 
-        new Chart(canvas, {
+        var panssChart = new Chart(canvas, {
             type: 'doughnut',
             data: {
                 labels: <?php echo json_encode(array_column($domain_scores, 'title'), JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_HEX_TAG); ?>,
@@ -1229,7 +1470,7 @@ require 'layout/base.php';
                 maintainAspectRatio: false,
                 cutout: '64%',
                 layout: {
-                    padding: { top: 20, bottom: 20, left: 105, right: 105 }
+                    padding: { top: 20, bottom: 20, left: 135, right: 135 }
                 },
                 plugins: {
                     legend: { display: false },
@@ -1243,6 +1484,14 @@ require 'layout/base.php';
                 }
             },
             plugins: [sliceCalloutAndCenter]
+        });
+
+        // Print me exact centered size force karega
+        window.addEventListener('beforeprint', function () {
+            panssChart.resize(560, 225);
+        });
+        window.addEventListener('afterprint', function () {
+            panssChart.resize();
         });
     });
 </script>
