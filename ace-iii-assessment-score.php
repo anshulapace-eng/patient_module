@@ -5,6 +5,7 @@ if (session_status() === PHP_SESSION_NONE) {
 
 require 'config.php';
 require 'ace-iii-assessment-schema.php';
+require 'assessment-demographics.php';
 
 $current_role = (int) ($_SESSION['role'] ?? 0);
 $current_user_id = (int) ($_SESSION['user_id'] ?? 0);
@@ -114,6 +115,7 @@ $section_scores = [
 ];
 $chart_labels = [];
 $chart_values = [];
+$chart_maxes = [];
 $chart_colours = ['#0ea5e9', '#8b5cf6', '#14b8a6', '#f59e0b', '#ef4444'];
 
 if ($record) {
@@ -135,16 +137,20 @@ if ($record) {
         $details_decoded = json_decode((string) ($record['patient_details'] ?? ''), true);
         $demo_decoded = is_array($details_decoded['_demographics'] ?? null) ? $details_decoded['_demographics'] : [];
     }
-    foreach ($demo_decoded as $dk => $dv) {
-        if (is_string($dv) && trim($dv) !== '' && !in_array($dk, ['date', 'client_name'], true)) {
-            $label = ucwords(str_replace('_', ' ', (string) $dk));
-            $demographics[$label] = trim($dv);
+    $normalized_demo = assessment_demographics_normalize(is_array($demo_decoded) ? $demo_decoded : []);
+    foreach ($normalized_demo as $dk => $dv) {
+        if (in_array($dk, ['date', 'client_name'], true)) {
+            continue;
         }
+        $val_str = is_array($dv) ? implode(', ', array_filter($dv)) : trim((string) $dv);
+        $label = ucwords(str_replace('_', ' ', (string) $dk));
+        $demographics[$label] = $val_str !== '' ? $val_str : '—';
     }
 
     foreach ($section_scores as $section) {
         $chart_labels[] = $section['label'];
         $chart_values[] = $section['score'];
+        $chart_maxes[] = $section['max'];
     }
 }
 
@@ -302,12 +308,6 @@ require 'layout/base.php';
         gap: 8px;
     }
 
-    .hero-record-id {
-        font-size: 12px;
-        font-weight: 700;
-        color: #ccfbf1;
-    }
-
     .status-badge {
         display: inline-flex;
         align-items: center;
@@ -358,9 +358,9 @@ require 'layout/base.php';
     /* Summary Grid */
     .report-grid {
         display: grid;
-        grid-template-columns: 360px minmax(0, 1fr);
+        grid-template-columns: 450px minmax(0, 1fr);
         gap: 20px;
-        margin-top: 22px;
+        margin-top: 20px;
         align-items: stretch;
     }
 
@@ -411,39 +411,39 @@ require 'layout/base.php';
     .score-chart-wrap {
         position: relative;
         width: 100%;
-        max-width: 280px;
-        height: 230px;
-        margin: 0 auto 14px;
+        height: 255px;
+        margin: 0 auto;
     }
 
-    .chart-center-total {
-        position: absolute;
-        top: 42%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        text-align: center;
-        pointer-events: none;
+    .chart-legend-custom {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 6px 14px;
+        margin-top: 8px;
+        font-size: 11.5px;
+        font-weight: 600;
+        color: #475569;
     }
 
-    .chart-center-total strong {
-        display: block;
-        font-size: 32px;
-        font-weight: 900;
-        line-height: 1;
-        color: var(--ar-text);
+    .chart-legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
     }
 
-    .chart-center-total span {
-        font-size: 12px;
-        font-weight: 700;
-        color: var(--ar-muted);
+    .chart-legend-dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        flex-shrink: 0;
     }
 
     .summary-stats {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 10px;
-        margin-top: 12px;
+        margin-top: 14px;
     }
 
     .summary-stat {
@@ -482,9 +482,19 @@ require 'layout/base.php';
     }
 
     .section-name {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
         font-size: 13.5px;
         font-weight: 700;
         color: #334155;
+    }
+
+    .section-swatch {
+        width: 10px;
+        height: 10px;
+        border-radius: 3px;
+        flex-shrink: 0;
     }
 
     .section-track {
@@ -498,7 +508,6 @@ require 'layout/base.php';
         display: block;
         height: 100%;
         border-radius: inherit;
-        background: linear-gradient(90deg, #0f766e, #14b8a6);
     }
 
     .section-value {
@@ -509,7 +518,7 @@ require 'layout/base.php';
         display: block;
         font-size: 13.5px;
         font-weight: 800;
-        color: var(--ar-primary);
+        color: var(--ar-text);
     }
 
     .section-judge {
@@ -534,7 +543,7 @@ require 'layout/base.php';
 
     .demo-item span {
         display: block;
-        font-size: 11px;
+        font-size: 10.5px;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.04em;
@@ -546,20 +555,22 @@ require 'layout/base.php';
         margin-top: 3px;
         font-size: 13.5px;
         color: var(--ar-text);
+        overflow-wrap: anywhere;
     }
 
     /* Section Divider Title */
     .detail-heading {
-        margin: 30px 0 14px;
+        margin: 28px 0 14px;
         display: flex;
-        align-items: center;
+        align-items: baseline;
         justify-content: space-between;
         gap: 12px;
+        flex-wrap: wrap;
     }
 
     .detail-heading h2 {
         margin: 0;
-        font-size: 18px;
+        font-size: 17px;
         font-weight: 800;
         color: var(--ar-text);
     }
@@ -628,6 +639,7 @@ require 'layout/base.php';
         font-size: 13.5px;
         line-height: 1.55;
         color: #1e293b;
+        overflow-wrap: anywhere;
     }
 
     /* Compact Data Tables */
@@ -786,6 +798,42 @@ require 'layout/base.php';
         overflow-wrap: anywhere;
     }
 
+    /* Simple Invoice-Style Signature Footer */
+    .report-sign-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        gap: 40px;
+        margin-top: 40px;
+        padding: 24px 8px 8px;
+        border-top: 1px solid #e2e8f0;
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+
+    .report-sign-block {
+        width: 240px;
+        text-align: center;
+    }
+
+    .report-sign-line {
+        border-top: 1px solid #334155;
+        margin-top: 52px;
+        padding-top: 8px;
+    }
+
+    .report-sign-title {
+        font-size: 13px;
+        font-weight: 700;
+        color: #0f172a;
+    }
+
+    .report-sign-sub {
+        font-size: 11.5px;
+        color: #64748b;
+        margin-top: 2px;
+    }
+
     .report-empty {
         margin: 28px auto;
         max-width: 640px;
@@ -797,8 +845,13 @@ require 'layout/base.php';
         text-align: center;
     }
 
-    @media (max-width: 960px) {
-        .report-grid,
+    @media (max-width: 1024px) {
+        .report-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @media (max-width: 900px) {
         .report-meta,
         .drawings-grid {
             grid-template-columns: 1fr;
@@ -815,7 +868,16 @@ require 'layout/base.php';
         .hero-right { align-items: flex-start; }
         .demo-grid,
         .naming-grid { grid-template-columns: 1fr; }
+        .section-row { grid-template-columns: 110px minmax(0, 1fr) 82px; gap: 10px; }
         .kv-row { flex-direction: column; align-items: flex-start; }
+        .report-sign-footer {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 28px;
+        }
+        .report-sign-block {
+            width: 100%;
+        }
     }
 
     @media print {
@@ -834,12 +896,27 @@ require 'layout/base.php';
             max-width: none;
             padding: 0;
         }
-        .report-card,
+        .report-grid {
+            grid-template-columns: 1fr;
+        }
         .report-hero,
         .sub-block,
-        .drawing-card {
+        .drawing-card,
+        .naming-cell,
+        .report-sign-footer {
             box-shadow: none !important;
             break-inside: avoid;
+            page-break-inside: avoid;
+        }
+        .report-card {
+            box-shadow: none !important;
+            overflow: visible !important;
+            break-inside: auto !important;
+            page-break-inside: auto !important;
+        }
+        .card-head {
+            break-after: avoid;
+            page-break-after: avoid;
         }
     }
 </style>
@@ -871,7 +948,6 @@ require 'layout/base.php';
                     <p class="report-subtitle">Addenbrooke's Cognitive Examination (Indian English) &middot; 100-Point Assessment</p>
                 </div>
                 <div class="hero-right">
-                    <span class="hero-record-id">Record #<?php echo (int) $record['id']; ?></span>
                     <span class="status-badge <?php echo $status_class; ?>">
                         <?php echo ace_iii_report_escape($status_text); ?>
                     </span>
@@ -894,6 +970,25 @@ require 'layout/base.php';
             </div>
         </header>
 
+        <!-- PATIENT DEMOGRAPHICS -->
+        <?php if (!empty($demographics)): ?>
+            <section class="report-card" style="margin-top: 20px;">
+                <div class="card-head">
+                    <h2>Patient Demographic Details</h2>
+                </div>
+                <div class="card-body-pad">
+                    <div class="demo-grid">
+                        <?php foreach ($demographics as $demo_label => $demo_val): ?>
+                            <div class="demo-item">
+                                <span><?php echo ace_iii_report_escape($demo_label); ?></span>
+                                <strong><?php echo ace_iii_report_escape($demo_val); ?></strong>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            </section>
+        <?php endif; ?>
+
         <!-- SUMMARY CHARTS & DOMAIN BREAKDOWN -->
         <div class="report-grid">
             <section class="report-card" aria-labelledby="aceSummaryTitle">
@@ -903,10 +998,14 @@ require 'layout/base.php';
                 <div class="card-body-pad">
                     <div class="score-chart-wrap">
                         <canvas id="ace3ScoreChart" role="img" aria-label="ACE-III total score chart"></canvas>
-                        <div class="chart-center-total">
-                            <strong><?php echo (int) $total_score; ?></strong>
-                            <span>/ 100</span>
-                        </div>
+                    </div>
+                    <div class="chart-legend-custom">
+                        <?php foreach (array_values($section_scores) as $idx => $sec): ?>
+                            <span class="chart-legend-item">
+                                <span class="chart-legend-dot" style="background: <?php echo $chart_colours[$idx]; ?>;"></span>
+                                <?php echo ace_iii_report_escape($sec['label']); ?>
+                            </span>
+                        <?php endforeach; ?>
                     </div>
                     <div class="summary-stats">
                         <div class="summary-stat">
@@ -928,12 +1027,15 @@ require 'layout/base.php';
                 </div>
                 <div class="card-body-pad">
                     <div class="section-list">
-                        <?php foreach ($section_scores as $section): ?>
+                        <?php foreach (array_values($section_scores) as $idx => $section): ?>
                             <?php $section_percent = $section['max'] > 0 ? ($section['score'] / $section['max']) * 100 : 0; ?>
                             <div class="section-row">
-                                <span class="section-name"><?php echo ace_iii_report_escape($section['label']); ?></span>
+                                <span class="section-name">
+                                    <span class="section-swatch" style="background: <?php echo $chart_colours[$idx]; ?>;"></span>
+                                    <?php echo ace_iii_report_escape($section['label']); ?>
+                                </span>
                                 <span class="section-track" aria-hidden="true">
-                                    <span class="section-fill" style="width: <?php echo max(0, min(100, $section_percent)); ?>%;"></span>
+                                    <span class="section-fill" style="width: <?php echo max(0, min(100, $section_percent)); ?>%; background: <?php echo $chart_colours[$idx]; ?>;"></span>
                                 </span>
                                 <span class="section-value">
                                     <strong><?php echo (int) $section['score']; ?> / <?php echo (int) $section['max']; ?></strong>
@@ -947,25 +1049,6 @@ require 'layout/base.php';
                 </div>
             </section>
         </div>
-
-        <!-- PATIENT DEMOGRAPHICS (IF RECORDED) -->
-        <?php if (!empty($demographics)): ?>
-            <section class="report-card" style="margin-top: 20px;">
-                <div class="card-head">
-                    <h2>Patient Demographics</h2>
-                </div>
-                <div class="card-body-pad">
-                    <div class="demo-grid">
-                        <?php foreach ($demographics as $demo_label => $demo_val): ?>
-                            <div class="demo-item">
-                                <span><?php echo ace_iii_report_escape($demo_label); ?></span>
-                                <strong><?php echo ace_iii_report_escape($demo_val); ?></strong>
-                            </div>
-                        <?php endforeach; ?>
-                    </div>
-                </div>
-            </section>
-        <?php endif; ?>
 
         <!-- DETAILED FORM RESPONSES HEADING -->
         <div class="detail-heading">
@@ -1368,6 +1451,22 @@ require 'layout/base.php';
                 </div>
             </section>
         <?php endif; ?>
+
+        <!-- Simple Invoice-Style Signature Footer -->
+        <div class="report-sign-footer">
+            <div class="report-sign-block">
+                <div class="report-sign-line">
+                    <div class="report-sign-title"><?php echo ace_iii_report_escape($clinician_name); ?></div>
+                    <div class="report-sign-sub">Evaluating Clinician</div>
+                </div>
+            </div>
+            <div class="report-sign-block">
+                <div class="report-sign-line">
+                    <div class="report-sign-title">Authorized Signatory</div>
+                    <div class="report-sign-sub">Clinical Supervisor / Stamp</div>
+                </div>
+            </div>
+        </div>
     <?php endif; ?>
 </div>
 
@@ -1377,6 +1476,98 @@ require 'layout/base.php';
         var canvas = document.getElementById('ace3ScoreChart');
         if (!canvas) return;
 
+        var totalScore = <?php echo (int) $total_score; ?>;
+        var domainMaxes = <?php echo json_encode($chart_maxes); ?>;
+
+        var aceCalloutAndCenter = {
+            id: 'aceCalloutAndCenter',
+            afterDatasetsDraw: function (chart) {
+                var ctx = chart.ctx;
+                var meta = chart.getDatasetMeta(0);
+                var data = chart.data.datasets[0].data;
+                var labels = chart.data.labels;
+                var colors = chart.data.datasets[0].backgroundColor;
+
+                if (!meta.data || !meta.data.length) return;
+
+                ctx.save();
+
+                // 1. Exact center me Total Score
+                var centerX = meta.data[0].x;
+                var centerY = meta.data[0].y;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = '#0f172a';
+                ctx.font = '900 30px system-ui, -apple-system, sans-serif';
+                ctx.fillText(String(totalScore), centerX, centerY - 8);
+                ctx.fillStyle = '#64748b';
+                ctx.font = '700 12px system-ui, -apple-system, sans-serif';
+                ctx.fillText('/ 100', centerX, centerY + 14);
+
+                // 2. Har slice ke bagal me Name + Score (anti-overlap ke saath)
+                var rightItems = [];
+                var leftItems = [];
+
+                meta.data.forEach(function (arc, index) {
+                    var value = data[index];
+                    if (!value || value <= 0) return;
+
+                    var angle = (arc.startAngle + arc.endAngle) / 2;
+                    var cos = Math.cos(angle);
+                    var sin = Math.sin(angle);
+                    var item = {
+                        index: index,
+                        label: String(labels[index] || ''),
+                        value: value,
+                        color: colors[index] || '#334155',
+                        x1: arc.x + cos * (arc.outerRadius + 2),
+                        y1: arc.y + sin * (arc.outerRadius + 2),
+                        x2: arc.x + cos * (arc.outerRadius + 11),
+                        y2: arc.y + sin * (arc.outerRadius + 11),
+                        isRight: cos >= 0
+                    };
+                    if (item.isRight) {
+                        rightItems.push(item);
+                    } else {
+                        leftItems.push(item);
+                    }
+                });
+
+                function drawSide(items) {
+                    items.sort(function (a, b) { return a.y2 - b.y2; });
+                    var minGap = 24;
+                    for (var i = 1; i < items.length; i++) {
+                        if (items[i].y2 - items[i - 1].y2 < minGap) {
+                            items[i].y2 = items[i - 1].y2 + minGap;
+                        }
+                    }
+
+                    ctx.font = '700 10.5px system-ui, -apple-system, sans-serif';
+                    ctx.textBaseline = 'middle';
+
+                    items.forEach(function (item) {
+                        var x3 = item.x2 + (item.isRight ? 8 : -8);
+                        ctx.beginPath();
+                        ctx.moveTo(item.x1, item.y1);
+                        ctx.lineTo(item.x2, item.y2);
+                        ctx.lineTo(x3, item.y2);
+                        ctx.strokeStyle = '#475569';
+                        ctx.lineWidth = 1.15;
+                        ctx.stroke();
+
+                        ctx.fillStyle = '#0f172a';
+                        ctx.textAlign = item.isRight ? 'left' : 'right';
+                        ctx.fillText(item.label + ' (' + item.value + ')', x3 + (item.isRight ? 4 : -4), item.y2);
+                    });
+                }
+
+                drawSide(rightItems);
+                drawSide(leftItems);
+
+                ctx.restore();
+            }
+        };
+
         new Chart(canvas, {
             type: 'doughnut',
             data: {
@@ -1385,32 +1576,29 @@ require 'layout/base.php';
                     data: <?php echo json_encode($chart_values, JSON_UNESCAPED_UNICODE); ?>,
                     backgroundColor: <?php echo json_encode($chart_colours, JSON_UNESCAPED_UNICODE); ?>,
                     borderWidth: 2,
-                    borderColor: '#ffffff'
+                    borderColor: '#ffffff',
+                    hoverOffset: 5
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                cutout: '68%',
+                cutout: '64%',
+                layout: {
+                    padding: { top: 22, bottom: 22, left: 108, right: 108 }
+                },
                 plugins: {
-                    legend: {
-                        position: 'bottom',
-                        labels: {
-                            usePointStyle: true,
-                            padding: 12,
-                            color: '#475569',
-                            font: { size: 11.5, weight: '600' }
-                        }
-                    },
+                    legend: { display: false },
                     tooltip: {
                         callbacks: {
                             label: function (context) {
-                                return ' ' + context.label + ': ' + context.raw + ' points';
+                                return ' ' + context.label + ': ' + context.raw + ' / ' + domainMaxes[context.dataIndex];
                             }
                         }
                     }
                 }
-            }
+            },
+            plugins: [aceCalloutAndCenter]
         });
     });
 </script>

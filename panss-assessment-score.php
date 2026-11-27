@@ -6,6 +6,7 @@ if (session_status() === PHP_SESSION_NONE) {
 require 'config.php';
 require 'panss-assessment-items.php';
 require 'panss-assessment-schema.php';
+require 'assessment-demographics.php';
 
 if (!isset($_SESSION['user_login']) || (int) ($_SESSION['role'] ?? 0) !== 1) {
     header('Location: login.php');
@@ -39,7 +40,7 @@ if ($assessment_id === false || $assessment_id < 1) {
 } else {
     $stmt = $conn->prepare(
         'SELECT p.id, p.assessment_date, p.positive_score, p.negative_score, p.general_score,
-                p.composite_score, p.score_data, p.clinical_notes,
+                p.composite_score, p.score_data, p.clinical_notes, p.demographic_data,
                 TRIM(CONCAT(COALESCE(u.first_name, \'\'), \' \', COALESCE(NULLIF(u.last_name, \'.\'), \'\'))) AS patient_name,
                 TRIM(CONCAT(COALESCE(c.first_name, \'\'), \' \', COALESCE(NULLIF(c.last_name, \'.\'), \'\'))) AS clinician_name
          FROM panss_assessments p
@@ -79,6 +80,7 @@ $notes = '';
 $domain_scores = [];
 $all_scores = [];
 $score_data = [];
+$demographics_list = [];
 $composite_score = 0;
 $combined_total = 0;
 $chart_colors = ['#4f46e5', '#0ea5e9', '#0f766e'];
@@ -90,6 +92,17 @@ if ($record) {
     $clinician_name = trim($record['clinician_name']) ?: 'Unknown clinician';
     $notes = (string) ($record['clinical_notes'] ?? '');
     $composite_score = (int) $record['composite_score'];
+
+    $decoded_demo = json_decode((string) ($record['demographic_data'] ?? ''), true);
+    $normalized_demo = assessment_demographics_normalize(is_array($decoded_demo) ? $decoded_demo : []);
+    foreach ($normalized_demo as $key => $val) {
+        if (in_array($key, ['date', 'client_name'], true)) {
+            continue;
+        }
+        $val_str = is_array($val) ? implode(', ', array_filter($val)) : trim((string) $val);
+        $label = ucwords(str_replace('_', ' ', (string) $key));
+        $demographics_list[$label] = $val_str !== '' ? $val_str : '—';
+    }
 
     foreach ($panss_sections as $prefix => $section) {
         if ($prefix === 'P') {
@@ -263,12 +276,6 @@ require 'layout/base.php';
         gap: 8px;
     }
 
-    .hero-record-id {
-        font-size: 12px;
-        font-weight: 700;
-        color: #ccfbf1;
-    }
-
     .hero-total-pill {
         display: inline-flex;
         align-items: center;
@@ -313,6 +320,42 @@ require 'layout/base.php';
         font-size: 14.5px;
         font-weight: 700;
         color: #fff;
+    }
+
+    /* Demographic Details Card */
+    .demo-card {
+        margin-top: 20px;
+    }
+
+    .demo-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px 16px;
+    }
+
+    .demo-item {
+        background: #f8fafc;
+        border: 1px solid var(--pr-border-soft);
+        border-radius: 9px;
+        padding: 10px 13px;
+    }
+
+    .demo-item span {
+        display: block;
+        font-size: 10.5px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--pr-muted);
+    }
+
+    .demo-item strong {
+        display: block;
+        margin-top: 3px;
+        font-size: 13.5px;
+        font-weight: 700;
+        color: var(--pr-text);
+        overflow-wrap: anywhere;
     }
 
     /* 4-Column Subscale KPI Strip */
@@ -415,7 +458,7 @@ require 'layout/base.php';
     /* Overview Grid (Chart + Domain Bars) */
     .overview-grid {
         display: grid;
-        grid-template-columns: 360px minmax(0, 1fr);
+        grid-template-columns: 440px minmax(0, 1fr);
         gap: 20px;
         margin-top: 20px;
         align-items: stretch;
@@ -424,32 +467,32 @@ require 'layout/base.php';
     .score-chart-wrap {
         position: relative;
         width: 100%;
-        max-width: 260px;
-        height: 220px;
-        margin: 0 auto 12px;
+        height: 235px;
+        margin: 0 auto;
     }
 
-    .chart-center {
-        position: absolute;
-        top: 43%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        text-align: center;
-        pointer-events: none;
+    .chart-legend-custom {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 8px 16px;
+        margin-top: 8px;
+        font-size: 11.5px;
+        font-weight: 600;
+        color: #475569;
     }
 
-    .chart-center strong {
-        display: block;
-        font-size: 32px;
-        font-weight: 900;
-        line-height: 1;
-        color: var(--pr-text);
+    .chart-legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
     }
 
-    .chart-center span {
-        font-size: 12px;
-        font-weight: 700;
-        color: var(--pr-muted);
+    .chart-legend-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        flex-shrink: 0;
     }
 
     /* Domain Distribution Bars */
@@ -707,6 +750,42 @@ require 'layout/base.php';
         overflow-wrap: anywhere;
     }
 
+    /* Simple Invoice-Style Signature Footer */
+    .report-sign-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        gap: 40px;
+        margin-top: 48px;
+        padding: 28px 8px 8px;
+        border-top: 1px solid #e2e8f0;
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+
+    .report-sign-block {
+        width: 240px;
+        text-align: center;
+    }
+
+    .report-sign-line {
+        border-top: 1px solid #334155;
+        margin-top: 52px;
+        padding-top: 8px;
+    }
+
+    .report-sign-title {
+        font-size: 13px;
+        font-weight: 700;
+        color: #0f172a;
+    }
+
+    .report-sign-sub {
+        font-size: 11.5px;
+        color: #64748b;
+        margin-top: 2px;
+    }
+
     .report-empty {
         margin: 28px auto;
         max-width: 640px;
@@ -720,6 +799,7 @@ require 'layout/base.php';
 
     @media (max-width: 1024px) {
         .panss-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .demo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .overview-grid,
         .pn-grid,
         .item-list-2col { grid-template-columns: 1fr; }
@@ -732,10 +812,19 @@ require 'layout/base.php';
         .hero-right { align-items: flex-start; }
         .item-row { grid-template-columns: minmax(0, 1fr) auto; }
         .item-track { display: none; }
+        .report-sign-footer {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 28px;
+        }
+        .report-sign-block {
+            width: 100%;
+        }
     }
 
     @media (max-width: 480px) {
-        .panss-kpi-grid { grid-template-columns: 1fr; }
+        .panss-kpi-grid,
+        .demo-grid { grid-template-columns: 1fr; }
     }
 
     @media print {
@@ -755,10 +844,22 @@ require 'layout/base.php';
             padding: 0;
         }
         .report-hero,
-        .report-card,
-        .panss-kpi {
+        .panss-kpi,
+        .item-row,
+        .composite-box {
             box-shadow: none !important;
             break-inside: avoid;
+            page-break-inside: avoid;
+        }
+        .report-card {
+            box-shadow: none !important;
+            overflow: visible !important;
+            break-inside: auto !important;
+            page-break-inside: auto !important;
+        }
+        .card-head {
+            break-after: avoid;
+            page-break-after: avoid;
         }
     }
 </style>
@@ -790,7 +891,6 @@ require 'layout/base.php';
                     <p class="report-subtitle">Positive and Negative Syndrome Scale &middot; 30-Item Clinician-Rated Assessment</p>
                 </div>
                 <div class="hero-right">
-                    <span class="hero-record-id">Record #<?php echo (int) $record['id']; ?></span>
                     <span class="hero-total-pill">Combined Score: <?php echo (int) $combined_total; ?> / 210</span>
                 </div>
             </div>
@@ -810,6 +910,25 @@ require 'layout/base.php';
                 </div>
             </div>
         </header>
+
+        <!-- PATIENT DEMOGRAPHIC DETAILS -->
+        <?php if (!empty($demographics_list)): ?>
+            <section class="report-card demo-card" aria-labelledby="panssDemoTitle">
+                <div class="card-head">
+                    <h2 id="panssDemoTitle">Patient Demographic Details</h2>
+                </div>
+                <div class="card-body-pad">
+                    <div class="demo-grid">
+                        <?php foreach ($demographics_list as $demo_label => $demo_value): ?>
+                            <div class="demo-item">
+                                <span><?php echo panss_score_escape($demo_label); ?></span>
+                                <strong><?php echo panss_score_escape($demo_value); ?></strong>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            </section>
+        <?php endif; ?>
 
         <!-- 4-COLUMN SUBSCALE KPI STRIP -->
         <div class="panss-kpi-grid">
@@ -855,10 +974,14 @@ require 'layout/base.php';
                 <div class="card-body-pad">
                     <div class="score-chart-wrap">
                         <canvas id="panssScoreChart" role="img" aria-label="PANSS Positive, Negative and General scale scores"></canvas>
-                        <div class="chart-center">
-                            <strong><?php echo (int) $combined_total; ?></strong>
-                            <span>/ 210</span>
-                        </div>
+                    </div>
+                    <div class="chart-legend-custom">
+                        <?php foreach ($domain_scores as $index => $domain): ?>
+                            <span class="chart-legend-item">
+                                <span class="chart-legend-dot" style="background: <?php echo $chart_colors[$index]; ?>;"></span>
+                                <?php echo panss_score_escape($domain['title']); ?>
+                            </span>
+                        <?php endforeach; ?>
                     </div>
                 </div>
             </section>
@@ -983,6 +1106,22 @@ require 'layout/base.php';
                 </div>
             </section>
         <?php endif; ?>
+
+        <!-- Simple Invoice-Style Signature Footer -->
+        <div class="report-sign-footer">
+            <div class="report-sign-block">
+                <div class="report-sign-line">
+                    <div class="report-sign-title"><?php echo panss_score_escape($clinician_name); ?></div>
+                    <div class="report-sign-sub">Evaluating Clinician</div>
+                </div>
+            </div>
+            <div class="report-sign-block">
+                <div class="report-sign-line">
+                    <div class="report-sign-title">Authorized Signatory</div>
+                    <div class="report-sign-sub">Clinical Supervisor / Stamp</div>
+                </div>
+            </div>
+        </div>
     <?php endif; ?>
 </div>
 
@@ -991,6 +1130,86 @@ require 'layout/base.php';
     document.addEventListener('DOMContentLoaded', function () {
         var canvas = document.getElementById('panssScoreChart');
         if (!canvas) return;
+
+        var combinedTotal = <?php echo (int) $combined_total; ?>;
+
+        var sliceCalloutAndCenter = {
+            id: 'sliceCalloutAndCenter',
+            afterDatasetsDraw: function (chart) {
+                var ctx = chart.ctx;
+                var meta = chart.getDatasetMeta(0);
+                var data = chart.data.datasets[0].data;
+                var labels = chart.data.labels;
+
+                if (!meta.data || !meta.data.length) return;
+
+                ctx.save();
+
+                // Exact center me Total Score
+                var centerX = meta.data[0].x;
+                var centerY = meta.data[0].y;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = '#0f172a';
+                ctx.font = '900 28px system-ui, -apple-system, sans-serif';
+                ctx.fillText(String(combinedTotal), centerX, centerY - 8);
+                ctx.fillStyle = '#64748b';
+                ctx.font = '700 12px system-ui, -apple-system, sans-serif';
+                ctx.fillText('/ 210', centerX, centerY + 14);
+
+                // Har slice ke bagal me full name + score (cleanly wrapped)
+                ctx.font = '700 10.5px system-ui, -apple-system, sans-serif';
+                ctx.textBaseline = 'middle';
+
+                meta.data.forEach(function (arc, index) {
+                    var value = data[index];
+                    if (!value || value <= 0) return;
+
+                    var angle = (arc.startAngle + arc.endAngle) / 2;
+                    var cos = Math.cos(angle);
+                    var sin = Math.sin(angle);
+
+                    var x1 = arc.x + cos * (arc.outerRadius + 2);
+                    var y1 = arc.y + sin * (arc.outerRadius + 2);
+                    var x2 = arc.x + cos * (arc.outerRadius + 10);
+                    var y2 = arc.y + sin * (arc.outerRadius + 10);
+                    var isRight = cos >= 0;
+                    var x3 = x2 + (isRight ? 8 : -8);
+
+                    ctx.beginPath();
+                    ctx.moveTo(x1, y1);
+                    ctx.lineTo(x2, y2);
+                    ctx.lineTo(x3, y2);
+                    ctx.strokeStyle = '#334155';
+                    ctx.lineWidth = 1.2;
+                    ctx.stroke();
+
+                    var fullLabel = String(labels[index] || '');
+                    var words = fullLabel.split(' ');
+                    var lines = [];
+                    if (words.length >= 3) {
+                        lines.push(words[0]);
+                        lines.push(words[1]);
+                        lines.push(words.slice(2).join(' ') + ' (' + value + ')');
+                    } else {
+                        lines.push(fullLabel);
+                        lines.push('(' + value + ')');
+                    }
+
+                    ctx.fillStyle = '#0f172a';
+                    ctx.textAlign = isRight ? 'left' : 'right';
+                    var textX = x3 + (isRight ? 4 : -4);
+                    var lineHeight = 13;
+                    var startY = y2 - ((lines.length - 1) * lineHeight) / 2;
+
+                    lines.forEach(function (line, i) {
+                        ctx.fillText(line, textX, startY + i * lineHeight);
+                    });
+                });
+
+                ctx.restore();
+            }
+        };
 
         new Chart(canvas, {
             type: 'doughnut',
@@ -1008,17 +1227,12 @@ require 'layout/base.php';
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                cutout: '68%',
+                cutout: '64%',
+                layout: {
+                    padding: { top: 20, bottom: 20, left: 105, right: 105 }
+                },
                 plugins: {
-                    legend: {
-                        position: 'bottom',
-                        labels: {
-                            usePointStyle: true,
-                            padding: 12,
-                            color: '#475569',
-                            font: { size: 11.5, weight: '600' }
-                        }
-                    },
+                    legend: { display: false },
                     tooltip: {
                         callbacks: {
                             label: function (context) {
@@ -1027,7 +1241,8 @@ require 'layout/base.php';
                         }
                     }
                 }
-            }
+            },
+            plugins: [sliceCalloutAndCenter]
         });
     });
 </script>

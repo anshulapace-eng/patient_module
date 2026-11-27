@@ -10,6 +10,7 @@ include 'config.php'; // Database connection
 // URL se IDs pakdein
 $assessment_id = isset($_GET['assessment_id']) ? intval($_GET['assessment_id']) : 0;
 $patient_id = isset($_GET['patient_id']) ? intval($_GET['patient_id']) : 0;
+$assignment_id = isset($_GET['assignment_id']) ? intval($_GET['assignment_id']) : 0;
 
 if ($patient_id <= 0) {
     echo "<div style='text-align:center; padding: 50px; font-family: sans-serif;'><h2>Invalid Patient ID.</h2><button onclick='history.back()'>Go Back</button></div>";
@@ -30,11 +31,18 @@ if (isset($conn)) {
             INNER JOIN users u ON u.id = ar.patient_id
                 AND u.role_id = 2
                 AND u.patient_id = " . PATIENT_SCOPE_ID . "
-            WHERE ar.patient_id = ?
-            ORDER BY ar.id DESC LIMIT 1";
+            WHERE ar.patient_id = ?";
+    if ($assignment_id > 0) {
+        $sql .= " AND ar.assignment_id = ?";
+    }
+    $sql .= " ORDER BY ar.id DESC LIMIT 1";
             
     if ($stmt = $conn->prepare($sql)) {
-        $stmt->bind_param("i", $patient_id);
+        if ($assignment_id > 0) {
+            $stmt->bind_param("ii", $patient_id, $assignment_id);
+        } else {
+            $stmt->bind_param("i", $patient_id);
+        }
         $stmt->execute();
         $res = $stmt->get_result();
         

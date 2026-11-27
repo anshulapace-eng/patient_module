@@ -18,14 +18,14 @@
             'bprs-assessment-records.php'
         ], true);
         $is_bdi_active = in_array($current_page, [
+            'bdi-assessments.php',
             'bdi-assessment-records.php',
-            'assessment-form.php',
             'assessment-report.php'
         ], true)
             || ($current_page === 'assigned-assessments.php' && isset($_GET['assessment_id']) && (int) $_GET['assessment_id'] === 1);
         $is_bai_active = in_array($current_page, [
+            'bai-assessments.php',
             'bai-assessment-records.php',
-            'assessment-form.php',
             'assessment-report.php'
         ], true)
             || ($current_page === 'assigned-assessments.php' && isset($_GET['assessment_id']) && (int) $_GET['assessment_id'] === 2);
@@ -151,9 +151,9 @@
             <div class="collapse <?= $is_bdi_active ? 'show' : ''; ?>" id="bdiCollapse">
                 <ul class="nav flex-column ms-3">
                     <li class="nav-item">
-                        <a class="nav-link <?= $current_page == 'public-assessment-form.php' && isset($_GET['patient_id']) ? 'active' : ''; ?>" href="public-assessment-form.php" aria-current="false">
-                            <span class="nav-icon"><i class="bi bi-ui-checks" aria-hidden="true"></i></span>
-                            <span class="nav-text">Assessment Form</span>
+                        <a class="nav-link <?= $current_page == 'bdi-assessments.php' ? 'active' : ''; ?>" href="bdi-assessments.php">
+                            <span class="nav-icon"><i class="bi bi-heart-pulse" aria-hidden="true"></i></span>
+                            <span class="nav-text">BDI Assessment</span>
                         </a>
                     </li>
                     <li class="nav-item">
@@ -172,7 +172,7 @@
             <div class="collapse <?= $is_bai_active ? 'show' : ''; ?>" id="baiCollapse">
                 <ul class="nav flex-column ms-3">
                     <li class="nav-item">
-                        <a class="nav-link <?= $current_page == 'public-assessment-form.php' && isset($_GET['patient_id']) ? 'active' : ''; ?>" href="public-assessment-form.php" aria-current="false">
+                        <a class="nav-link <?= $current_page == 'bai-assessments.php' ? 'active' : ''; ?>" href="bai-assessments.php">
                             <span class="nav-icon"><i class="bi bi-ui-checks" aria-hidden="true"></i></span>
                             <span class="nav-text">Assessment Form</span>
                         </a>
