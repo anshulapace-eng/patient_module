@@ -129,7 +129,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $update->execute();
                 $update->close();
                 $_SESSION['bai_csrf_token'] = bin2hex(random_bytes(32));
-                header('Location: assessment-report.php?assessment_id=2&patient_id=' . $form_patient_id . '&assignment_id=' . $assignment_id);
+                header('Location: bai-assessment-score.php?id=' . (int) $conn->insert_id);
                 exit;
             }
             $error_msg = 'The assessment could not be saved. Please try again.';

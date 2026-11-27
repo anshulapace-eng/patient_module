@@ -678,7 +678,7 @@ require 'layout/base.php';
                             <td><?php echo !empty($record['completed_date']) ? date('d M Y', strtotime($record['completed_date'])) : '<span class="muted">—</span>'; ?></td>
                             <td>
                                 <div class="action-links">
-                                    <a class="btn-report" href="assessment-report.php?assessment_id=<?php echo (int) $record['assessment_id']; ?>&patient_id=<?php echo (int) $record['patient_id']; ?>&assignment_id=<?php echo (int) $record['assignment_id']; ?>">
+                                    <a class="btn-report" href="bai-assessment-score.php?id=<?php echo (int) $record['response_id']; ?>">
                                         <i class="bi bi-file-earmark-bar-graph" aria-hidden="true"></i> Report
                                     </a>
                                     <form method="post" class="d-inline delete-record-form" style="margin: 0;">

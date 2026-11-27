@@ -130,7 +130,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $update->execute();
                 $update->close();
                 $_SESSION['bdi_csrf_token'] = bin2hex(random_bytes(32));
-                header('Location: assessment-report.php?assessment_id=1&patient_id=' . $form_patient_id . '&assignment_id=' . $assignment_id);
+                header('Location: bdi-assessment-score.php?id=' . (int) $conn->insert_id);
                 exit;
             }
             $error_msg = 'The assessment could not be saved. Please try again.';
@@ -761,7 +761,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (liveScoreEl) liveScoreEl.textContent = String(totalScore);
         if (liveStatusEl) liveStatusEl.textContent = getBdiStatus(totalScore);
         if (progressFill && totalQuestions > 0) {
-            progressFill.style.width = Math.round((answered / totalQuestions) * 100) + '%';
+            progressFill.style.width = Math.round((answered / totalQuestions) + 100) + '%';
         }
     }
 

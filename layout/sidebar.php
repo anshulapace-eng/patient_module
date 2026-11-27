@@ -20,13 +20,15 @@
         $is_bdi_active = in_array($current_page, [
             'bdi-assessments.php',
             'bdi-assessment-records.php',
-            'assessment-report.php'
+            'assessment-report.php',
+            'bdi-assessment-score.php'
         ], true)
             || ($current_page === 'assigned-assessments.php' && isset($_GET['assessment_id']) && (int) $_GET['assessment_id'] === 1);
         $is_bai_active = in_array($current_page, [
             'bai-assessments.php',
             'bai-assessment-records.php',
-            'assessment-report.php'
+            'assessment-report.php',
+            'bai-assessment-score.php'
         ], true)
             || ($current_page === 'assigned-assessments.php' && isset($_GET['assessment_id']) && (int) $_GET['assessment_id'] === 2);
         $is_ace_iii_active = in_array($current_page, [
