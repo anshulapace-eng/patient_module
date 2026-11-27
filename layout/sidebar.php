@@ -27,10 +27,10 @@
     }
 
     .admin-sidebar .sidebar-logo-wrap {
-        width: 44px;
-        height: 44px;
+        width: 60px;
+        height: 50px;
         border-radius: 12px;
-        background: linear-gradient(135deg, #0f766e, #14b8a6);
+        background: #fff;
         padding: 6px;
         display: grid;
         place-items: center;
@@ -238,7 +238,7 @@
     <div class="sidebar-header">
         <a class="brand-mark" href="dashboard.php" aria-label="Vimhans Academic dashboard">
             <span class="sidebar-logo-wrap">
-                <img src="assets/image/logo.png" alt="Logo">
+                <img src="assets/image/vim_blue.png" alt="Logo">
             </span>
             <span class="brand-copy">
                 <span class="brand-title">Vimhans</span>
