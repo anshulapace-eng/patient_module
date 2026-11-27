@@ -630,7 +630,7 @@ require 'layout/base.php';
                                 $name = trim(($patient['first_name'] ?? '') . ' ' . ($patient['last_name'] ?? '')) ?: ($patient['email'] ?? 'Patient');
                             ?>
                                 <option value="<?php echo (int) $patient['id']; ?>" <?php echo $form_patient_id == (int) $patient['id'] ? 'selected' : ''; ?>>
-                                    <?php echo bai_escape($name); ?> (ID: <?php echo (int) $patient['id']; ?>)
+                                    <?php echo bai_escape($name); ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>
@@ -757,7 +757,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (liveScoreEl) liveScoreEl.textContent = String(totalScore);
         if (liveStatusEl) liveStatusEl.textContent = getBaiStatus(totalScore);
         if (progressFill && totalQuestions > 0) {
-            progressFill.style.width = Math.round((answered / totalQuestions) * 100) + '%';
+            progressFill.style.width = Math.round((answered / totalQuestions) + 100) + '%';
         }
     }
 

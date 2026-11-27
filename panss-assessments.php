@@ -893,7 +893,7 @@ require 'layout/base.php';
                                 $patient_name = $patient_name !== '' ? $patient_name : ($patient['email'] ?? 'Patient');
                                 ?>
                                 <option value="<?php echo (int) $patient['id']; ?>" <?php echo $form_patient_id === (int) $patient['id'] ? 'selected' : ''; ?>>
-                                    <?php echo panss_form_escape($patient_name); ?> (ID: <?php echo (int) $patient['id']; ?>)
+                                    <?php echo panss_form_escape($patient_name); ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>
