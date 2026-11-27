@@ -87,9 +87,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_ymrs']) && $ym
             $clinician_id = (int)($_SESSION['user_id'] ?? 0);
             $stmt->bind_param('iisisss', $form_patient_id, $clinician_id, $form_date, $total, $score_json, $form_notes, $demographic_json);
             if ($stmt->execute()) {
+                $saved_record_id = (int) $stmt->insert_id;
                 $_SESSION['ymrs_saved_score'] = $total;
                 $_SESSION['ymrs_csrf_token'] = bin2hex(random_bytes(32));
-                header('Location: ymrs-assessments.php?saved=1');
+                $stmt->close();
+                header('Location: ymrs-assessment-score.php?id=' . $saved_record_id);
                 exit;
             }
             $error_msg = 'The assessment could not be saved. Please try again.';

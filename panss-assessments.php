@@ -170,10 +170,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_panss']) && $s
                 $demographic_json
             );
             if ($insert_stmt->execute()) {
+                $saved_record_id = (int) $insert_stmt->insert_id;
                 $insert_stmt->close();
                 $_SESSION['panss_csrf_token'] = bin2hex(random_bytes(32));
-                $_SESSION['panss_form_success'] = 'Assessment saved successfully.';
-                header('Location: panss-assessments.php?saved=1');
+                header('Location: panss-assessment-score.php?id=' . $saved_record_id);
                 exit;
             }
             error_log('PANSS insert failed: ' . $insert_stmt->error);

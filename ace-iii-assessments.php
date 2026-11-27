@@ -617,7 +617,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_ace_iii']) && 
                         $_SESSION['ace_iii_saved'] = ($edit_record_id > 0)
                             ? 'ACE-III assessment updated successfully.'
                             : 'ACE-III assessment saved successfully.';
-                        header('Location: ace-iii-assessment-records.php');
+                        header('Location: ace-iii-assessment-score.php?id=' . (int) $target_record_id);
                         exit;
                     }
                     error_log('ACE-III update failed: ' . $update->error);
@@ -655,10 +655,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_ace_iii']) && 
                     ];
                     $insert->bind_param($insert_types, ...$insert_params);
                     if ($insert->execute()) {
+                        $saved_record_id = (int) $insert->insert_id;
                         $insert->close();
                         $_SESSION['ace_iii_csrf_token'] = bin2hex(random_bytes(32));
                         $_SESSION['ace_iii_saved'] = 'ACE-III assessment saved successfully.';
-                        header('Location: ace-iii-assessment-records.php');
+                        header('Location: ace-iii-assessment-score.php?id=' . $saved_record_id);
                         exit;
                     }
                     error_log('ACE-III insert failed: ' . $insert->error);
@@ -782,7 +783,7 @@ function ace_iii_get_picture_svg($index)
             <path d="M32 116 L53 116" stroke-width="2.5"/>
         </svg>',
         6 => '<svg viewBox="0 0 180 130" role="img" aria-label="Camel">
-            <path d="M44 62 C48 28 80 26 92 50 C99 58 106 58 113 44 C118 32 121 20 128 18 L142 18 C146 21 144 27 137 28 L130 29 C125 42 122 58 115 69 C112 76 109 80 104 82 L105 114 L99 114 L97 84 L90 114 L84 114 L88 82 C74 84 62 82 54 79 L50 114 L44 114 L47 81 L39 114 L33 114 L39 74 C37 68 39 64 44 62 Z" fill="#ffffff"/>
+            <path d="M44 62 C48 28 80 26 92 50 C99 58 106 58 113 44 C118 32 121 20 128 18 L142 18 C146 21 144 27 137 28 L130 29 C125 42 122 58 115 69 C112 76 109 80 104 82 L105 114 L99 114 L97 84 L90 114 L84 114 L88 82 C74 84 62 82 54 79 L50 114 L44 114 L47 81 L39 110 L33 110 L39 74 C37 68 39 64 44 62 Z" fill="#ffffff"/>
             <path d="M44 62 L34 80 L37 82 L43 68" fill="#e2e8f0"/>
             <circle cx="134" cy="22" r="1.6" fill="#0f172a" stroke="none"/>
             <path d="M126 18 L124 13 L129 16" fill="none"/>
@@ -1438,8 +1439,8 @@ require 'layout/base.php';
         border-spacing: 0;
         margin-top: 10px;
         font-size: 15px;
-        border: 1px solid var(--ace-border);
-        border-radius: 10px;
+               border: 1px solid var(--ace-border);
+               border-radius: 10px;
         overflow: hidden;
         box-shadow: var(--ace-shadow-sm);
     }
@@ -1584,7 +1585,7 @@ require 'layout/base.php';
         .ace-demo-col:first-child { border-right: none; border-bottom: 1px solid var(--ace-soft-border); }
         .ace-split-row { grid-template-columns: 1fr; }
         .ace-split-left { border-right: none; border-bottom: 1px solid var(--ace-soft-border); }
-        .ace-pic-grid-12 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .ace-pic-grid-12, .ace-quad-grid { grid-template-columns: 1fr; }
         .ace-visuo-grid { grid-template-columns: 1fr; }
     }
     @media (max-width: 640px) {
@@ -2337,7 +2338,7 @@ $recognition_rows = [
                     <td>
                         <?php
                         $rec_name = 'answers[' . $r_key . '_recalled]';
-                        $is_recalled = !empty($answers[$r_key . '_recalled']);
+                        $is_recalled = !empty($answers[$rec_name]);
                         ?>
                         <label class="ace-recog-opt justify-content-center">
                             <input type="checkbox" name="<?php echo ace_iii_escape($rec_name); ?>" value="1" <?php echo $is_recalled ? 'checked' : ''; ?>>
@@ -2754,6 +2755,7 @@ $recognition_rows = [
 
         // Disable autosave & unload warning on final submit
         aceForm.addEventListener('submit', function() {
+           
             isSubmitting = true;
             isDirty = false;
             clearTimeout(autosaveTimeout);

@@ -275,10 +275,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_bprs']) && $sc
                     $demographic_json
                 );
                 if ($insert_stmt->execute()) {
+                    $saved_record_id = (int) $insert_stmt->insert_id;
                     $insert_stmt->close();
                     $_SESSION['bprs_saved_score'] = $total_score;
                     $_SESSION['bprs_csrf_token'] = bin2hex(random_bytes(32));
-                    header('Location: bprs-assessments.php?saved=1');
+                    header('Location: bprs-assessment-score.php?id=' . $saved_record_id);
                     exit;
                 }
                 error_log('BPRS insert failed: ' . $insert_stmt->error);
